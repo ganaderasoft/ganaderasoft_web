@@ -1,6 +1,6 @@
 @extends('layouts.authenticated')
 
-@section('title', 'Tratamientos veterinarios')
+@section('title', 'Tratamientos')
 
 @section('content')
 <div class="space-y-6">
@@ -11,16 +11,14 @@
                 💊
             </div>
             <div class="min-w-0">
-                <h1 class="text-2xl sm:text-3xl font-bold text-ganaderasoft-negro tracking-tight">Tratamientos veterinarios</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-ganaderasoft-negro tracking-tight">Tratamientos</h1>
                 <p class="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1">Gestión y seguimiento de planes terapéuticos aplicados al rebaño</p>
             </div>
         </div>
         <div class="w-full min-[900px]:w-auto shrink-0">
             <a href="{{ route('tratamiento.create') }}" 
                class="w-full min-[900px]:w-auto px-5 sm:px-6 py-2.5 sm:py-3 bg-ganaderasoft-verde-oscuro text-white font-semibold rounded-xl hover:bg-opacity-90 transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm sm:text-base text-center whitespace-nowrap shrink-0">
-                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
+       
                 + Nuevo tratamiento
             </a>
         </div>

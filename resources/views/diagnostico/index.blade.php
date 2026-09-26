@@ -1,6 +1,6 @@
 @extends('layouts.authenticated')
 
-@section('title', 'Diagnósticos veterinarios')
+@section('title', 'Diagnósticos')
 
 @section('content')
 <div class="space-y-8">
@@ -11,7 +11,7 @@
                 🩺
             </div>
             <div class="min-w-0">
-                <h1 class="text-2xl sm:text-3xl font-bold text-ganaderasoft-negro tracking-tight">Diagnósticos veterinarios</h1>
+                <h1 class="text-2xl sm:text-3xl font-bold text-ganaderasoft-negro tracking-tight">Diagnósticos</h1>
                 <p class="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1">Gestión clínica, historial de diagnósticos y estado sanitario de los animales</p>
             </div>
         </div>
