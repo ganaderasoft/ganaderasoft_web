@@ -80,6 +80,9 @@
                                     </option>
                                 @endforeach
                             </select>
+                            <p class="text-xs text-gray-500 mt-1.5 flex items-center gap-1">
+                                <span>ℹ️</span> Si la raza es pública y ya está en uso por varias fincas, no podrá asignarse a una finca específica a menos que sea la única que la utiliza.
+                            </p>
                             @error('finca_id')<p class="text-xs text-red-600 font-medium mt-1">{{ $message }}</p>@enderror
                         </div>
                     </div>
