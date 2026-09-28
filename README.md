@@ -1,6 +1,6 @@
 # GanaderaSoft - Sistema de gestión ganadera
 
-GanaderaSoft es un sistema de gestión ganadera desarrollado en Laravel 10 con PHP 8.1. Funciona como un gateway API que se conecta a servicios externos para el manejo integral de datos ganaderos incluyendo animales, fincas, rebaños, lactancia, producción lechera y más.
+GanaderaSoft Frontend es la aplicación web desarrollada en Laravel 10 (Blade, Tailwind CSS y Vite) que sirve como interfaz de usuario y panel administrativo para la gestión integral de operaciones ganaderas, consumiendo los servicios de la API REST de GanaderaSoft para el manejo de animales, fincas, rebaños, lactancia, producción lechera y más.
 
 ## 1. ⚒️ Stack tecnológico
 
@@ -20,7 +20,7 @@ GanaderaSoft es un sistema de gestión ganadera desarrollado en Laravel 10 con P
 ## 2. 📂 Infraestructura y arquitectura
 
 ### 2.1 Arquitectura de software
-El proyecto del frontend sigue una arquitectura orientada a la presentación, conectándose a servicios externos de API:
+El proyecto del frontend sigue una arquitectura orientada a la presentación, conectándose a los servicios de la API REST Backend:
 
 ```text
 /frontend
@@ -32,9 +32,8 @@ El proyecto del frontend sigue una arquitectura orientada a la presentación, co
 │   │   └── Middleware/     # Filtros de peticiones HTTP
 │   ├── Providers/          # Proveedores de servicios
 │   └── Services/           # Servicios y conexión a la API externa
-│       ├── Api/            # Consumo de API REST real
-│       ├── Contracts/      # Interfaces de servicios
-│       └── Mock/           # Datos simulados para testing
+│       ├── Api/            # Consumo de API REST Backend
+│       └── Contracts/      # Interfaces de servicios
 ├── bootstrap/              # Arranque del framework
 ├── config/                 # Configuraciones
 ├── database/               # Migraciones locales (si aplica)
@@ -68,33 +67,9 @@ El proyecto maneja dos entornos con comportamientos diferentes:
 
 El proyecto utiliza **Dependency Injection** y **Service Layer Pattern**:
 
-1. **Interfaces** (`/Services/Contracts`): Definen contratos para cada servicio
-2. **Implementaciones API** (`/Services/Api`): Se conectan a APIs externas reales
-3. **Implementaciones Mock** (`/Services/Mock`): Datos simulados para desarrollo
-4. **Binding**: En `AppServiceProvider` se configuran qué implementaciones usar
-
-## Módulos principales
-
-### Gestión de animales
-- CRUD completo de animales
-- Seguimiento de etapas de vida
-- Estados de salud
-- Cambios y transiciones
-
-### Gestión de fincas y rebaños
-- Administración de propiedades ganaderas
-- Organización por rebaños
-- Gestión de personal
-
-### Producción lechera
-- Registros de lactancia
-- Control de producción diaria
-- Análisis de rendimiento
-
-### Dashboard y reportes
-- KPIs ganaderos
-- Visualización de datos
-- Métricas principales
+1. **Interfaces** (`/Services/Contracts`): Definen los contratos y métodos para cada servicio del sistema.
+2. **Implementaciones API** (`/Services/Api`): Consumen los endpoints de la API Backend V2 estandarizando peticiones HTTP, cabeceras de autorización y manejo de errores.
+3. **Binding**: En `AppServiceProvider` se asocian las interfaces a sus respectivas implementaciones del servicio API.
 
 ## 🚀 Pasos para desarrollo local
 
@@ -259,25 +234,17 @@ networks:
 ```
 </details>
 
-### 4. Configuración de la base de datos
-Para el entorno de desarrollo, el contenedor `ganaderasoft-db` de MySQL se encargará de proveer la base de datos con las siguientes credenciales configuradas por defecto:
+### 4. Configuración de la base de datos y Backend
+El frontend no posee base de datos local propia; consume directamente los servicios de la API Backend. Para el entorno de desarrollo local con Docker, el contenedor `ganaderasoft-db` de MySQL y el contenedor `ganaderasoft-backend` proveen la persistencia y la API:
 
-| Credencial | Valor |
-| :--- | :--- |
-| **Servidor / Host** | ganaderasoft-db |
-| **Puerto** | 3306 |
-| **Base de Datos** | ganaderasoft |
-| **Usuario** | ganaderasoft_user |
-| **Contraseña** | ganaderasoft_pass |
+| Variable / Parámetro | Valor por defecto (.env.dev) | Propósito |
+| :--- | :--- | :--- |
+| **API_BASE_URL** | `http://ganaderasoft-backend/api` | Endpoint interno de conexión con la API en red Docker. |
+| **API_TIMEOUT** | `15` | Timeout en segundos para peticiones HTTP a la API. |
+| **DB_HOST** | `ganaderasoft-db` | Host de base de datos aprovisionado en Docker (gestión backend). |
 
-> [!IMPORTANT]
-> **Importación de datos y migraciones**: 
-> Si es la primera vez que levanta el proyecto o si la base de datos está vacía, es indispensable ingresar al contenedor del backend y ejecutar las migraciones junto con los seeders (datos semilla) iniciales:
-> ```bash
-> docker compose exec ganaderasoft-backend bash
-> php artisan migrate --seed
-> ```
-> *(Alternativamente, si cuenta con un archivo SQL de respaldo como `bd_ganadera_soft.sql`, puede restaurarlo directamente en el gestor de base de datos de su preferencia utilizando las credenciales provistas).*
+> [!NOTE]
+> La ejecución de migraciones y carga de datos iniciales (`php artisan migrate --seed`) se gestiona desde el contenedor del backend (`ganaderasoft-backend`).
 
 ### 5. Ejecución del entorno con docker compose
 
@@ -361,7 +328,7 @@ git fetch -p
 
 ## Notas técnicas
 
-- **Autenticación**: Sistema personalizado con middleware `CheckMockAuth`
-- **API Gateway**: No usa base de datos local, se conecta a servicios externos
-- **Frontend**: Server-side rendering con Blade, CSS con Tailwind
-- **Servicios**: Intercambiables entre Mock y Api según configuración en `AppServiceProvider`
+- **Autenticación**: Validación de sesión web mediante middleware que almacena y propaga el token Bearer hacia las peticiones de la API.
+- **Arquitectura de presentación**: Server-side rendering (SSR) con Blade, estilos con Tailwind CSS y bundling eficiente con Vite.
+- **Consumo de API**: No requiere base de datos local; consume directamente la API Backend V2 a través de clientes HTTP en `app/Services/Api`.
+- **Inyección de dependencias**: Servicios desacoplados a través de interfaces registradas en `AppServiceProvider`.
