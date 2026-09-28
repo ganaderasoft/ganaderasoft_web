@@ -7,70 +7,81 @@ use App\Services\Contracts\RebanosServiceInterface;
 class ApiRebanosService extends BaseApiService implements RebanosServiceInterface
 {
     /**
-     * Get list of rebaños for authenticated user
+     * Obtiene la lista de rebaños del usuario autenticado.
+     *
+     * @param array $params
+     * @return array
      */
-    public function getRebanos(): array
+    public function getRebanos(array $params = []): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/rebanos', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/rebanos' . $this->buildQuery($params, true));
     }
 
     /**
-     * Create a new rebaño
+     * Obtiene los datos de un rebaño específico por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function getRebano(int $id): array
+    {
+        return $this->get("/rebanos/{$id}");
+    }
+
+    /**
+     * Crea un nuevo registro de rebaño.
+     *
+     * @param array $data
+     * @return array
      */
     public function createRebano(array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->post('/rebanos', $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->post('/rebanos', $data);
     }
 
     /**
-     * Update an existing rebaño
+     * Actualiza la información de un rebaño existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
      */
     public function updateRebano(int $id, array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
+        return $this->put("/rebanos/{$id}", $data);
+    }
 
-        $response = $this->put('/rebanos/' . $id, $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
+    /**
+     * Archiva un rebaño activo.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function archiveRebano(int $id): array
+    {
+        return $this->post("/rebanos/{$id}/archivar");
+    }
 
-        return $response;
+    /**
+     * Desarchiva un rebaño archivado.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function unarchiveRebano(int $id): array
+    {
+        return $this->post("/rebanos/{$id}/desarchivar");
+    }
+
+    /**
+     * Elimina definitivamente un rebaño y sus animales en cascada.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function deleteRebano(int $id): array
+    {
+        return $this->delete("/rebanos/{$id}");
     }
 }
+

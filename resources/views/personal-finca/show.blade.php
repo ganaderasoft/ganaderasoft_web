@@ -1,280 +1,266 @@
 @extends('layouts.authenticated')
 
-@section('title', 'Detalles del Personal - GanaderaSoft')
+@section('title', 'Detalle de personal de finca')
 
 @section('content')
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center">
-                <a href="{{ route('personal-finca.index') }}" 
-                   class="mr-4 text-ganaderasoft-celeste hover:text-ganaderasoft-celeste/80">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </a>
-                <h1 class="text-3xl font-bold text-ganaderasoft-negro">
-                    👥 {{ $personal['Nombre'] }} {{ $personal['Apellido'] }}
-                </h1>
+@php
+    $pId = $personalFinca['id'] ?? $personalFinca['id_Tecnico'] ?? null;
+    $personaSub = $personalFinca['persona'] ?? [];
+    
+    $nombre = $personaSub['nombre'] ?? $personalFinca['nombre'] ?? $personalFinca['Nombre'] ?? '';
+    $apellido = $personaSub['apellido'] ?? $personalFinca['apellido'] ?? $personalFinca['Apellido'] ?? '';
+    $nombreEmp = trim($nombre . ' ' . $apellido) ?: ($personalFinca['nombre_completo'] ?? ('Personal #' . $pId));
+    
+    $cedulaEmp = $personaSub['cedula'] ?? $personalFinca['cedula'] ?? $personalFinca['Cedula'] ?? '-';
+    $telefonoEmp = $personaSub['telefono'] ?? $personalFinca['telefono'] ?? $personalFinca['Telefono'] ?? null;
+    $correoEmp = $personaSub['correo'] ?? $personaSub['email'] ?? $personalFinca['correo'] ?? $personalFinca['Correo'] ?? $personalFinca['email'] ?? $personalFinca['Email'] ?? null;
+
+    $tipoObj = $personalFinca['tipo_trabajador'] ?? [];
+    $tipoNombre = is_string($tipoObj) ? $tipoObj : ($tipoObj['nombre'] ?? $personalFinca['tipo_trabajador_nombre'] ?? $personalFinca['Tipo_Trabajador'] ?? 'Trabajador');
+
+    $fincaObj = $personalFinca['finca'] ?? [];
+    $fincaId = $personalFinca['finca_id'] ?? $personalFinca['id_Finca'] ?? (is_array($fincaObj) ? ($fincaObj['id'] ?? null) : null);
+    $fincaNombre = is_array($fincaObj) ? ($fincaObj['nombre'] ?? null) : null;
+    if (!$fincaNombre) {
+        $fincaNombre = $personalFinca['finca_nombre'] ?? ('Finca #' . ($fincaId ?: 'N/A'));
+    }
+    $fincaTipo = is_array($fincaObj) ? ($fincaObj['explotacion_tipo'] ?? 'General') : 'General';
+    
+    $rawStatus = $personalFinca['status'] ?? 'activo';
+    $status = is_bool($rawStatus) ? $rawStatus : in_array(strtolower((string)$rawStatus), ['activo', 'active', '1', 'true'], true);
+    $createdAt = $personalFinca['created_at'] ?? null;
+    $fechaIngreso = $personalFinca['fecha_ingreso'] ?? $personalFinca['Fecha_Ingreso'] ?? null;
+    $fechaNacimiento = $personaSub['fecha_nacimiento'] ?? $personalFinca['fecha_nacimiento'] ?? $personalFinca['Fecha_Nacimiento'] ?? null;
+    
+    $inicial = strtoupper(substr($nombre ?: ($nombreEmp ?: 'P'), 0, 1));
+@endphp
+
+<div class="space-y-6">
+    <!-- Header Card -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex items-center space-x-4">
+            <div class="w-14 h-14 rounded-2xl bg-teal-50 text-teal-700 border border-teal-100 flex items-center justify-center font-bold text-2xl shadow-xs shrink-0">
+                {{ $inicial }}
             </div>
-            
-            <div class="flex space-x-3">
-                <a href="{{ route('personal-finca.edit', $personal['id_Tecnico']) }}" 
-                   class="bg-ganaderasoft-verde text-white px-4 py-2 rounded-lg hover:bg-ganaderasoft-verde/80 transition-colors">
-                    ✏️ Editar
-                </a>
+            <div>
+                <h1 class="text-3xl font-bold text-ganaderasoft-negro flex items-center gap-2">
+                    {{ $nombreEmp }}
+                </h1>
+                <p class="text-gray-500 text-sm mt-0.5 flex items-center gap-2">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
+                        💼 {{ $tipoNombre }}
+                    </span>
+                    <span>•</span>
+                    <span class="font-medium text-gray-700">🏡 {{ $fincaNombre }}</span>
+                </p>
             </div>
         </div>
 
-        @if(session('success'))
-            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6" role="alert">
-                <strong class="font-bold">¡Éxito! </strong>
-                <span class="block sm:inline">{{ session('success') }}</span>
-            </div>
-        @endif
+        <div class="flex flex-wrap items-center gap-3">
+            @if($pId)
+                <a href="{{ route('personal-finca.edit', $pId) }}"
+                   class="px-6 py-3 bg-ganaderasoft-azul hover:bg-opacity-90 text-white font-semibold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm inline-flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    Editar personal
+                </a>
+            @endif
+            <a href="{{ route('personal-finca.index') }}" 
+               class="px-6 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors text-sm inline-flex items-center gap-2 shadow-xs">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+                Ver listado
+            </a>
+        </div>
+    </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Panel Principal de Información -->
-            <div class="lg:col-span-2">
-                <!-- Información Personal -->
-                <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                    <div class="bg-ganaderasoft-celeste text-white px-6 py-4">
-                        <h2 class="text-lg font-semibold flex items-center">
-                            <span class="mr-2">
-                                @if($personal['Tipo_Trabajador'] == 'Veterinario')
-                                    🏥
-                                @elseif($personal['Tipo_Trabajador'] == 'Técnico')
-                                    🔧
-                                @elseif($personal['Tipo_Trabajador'] == 'Operario')
-                                    👷
-                                @elseif($personal['Tipo_Trabajador'] == 'Vigilante')
-                                    🛡️
-                                @elseif($personal['Tipo_Trabajador'] == 'Supervisor')
-                                    👨‍💼
-                                @else
-                                    👤
-                                @endif
+    <!-- Alert Messages -->
+    @if(session('success'))
+        <div class="p-4 bg-green-50 border-l-4 border-green-500 text-green-800 rounded-xl shadow-sm flex items-center space-x-2">
+            <span class="text-lg">✅</span>
+            <p class="text-sm font-medium">{{ session('success') }}</p>
+        </div>
+    @endif
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <!-- Columna Izquierda: Detalles (2 Tercios) -->
+        <div class="lg:col-span-2 space-y-6">
+            
+            <!-- Card 1: Identificación y Datos Personales -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                <h3 class="text-xl font-bold text-ganaderasoft-negro border-b border-gray-100 pb-3 flex items-center gap-2">
+                    <span>👤</span> Datos personales y de identificación
+                </h3>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 text-sm">
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Nombre</span>
+                        <p class="text-base font-bold text-gray-900">{{ $nombre ?: 'No especificado' }}</p>
+                    </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Apellido</span>
+                        <p class="text-base font-bold text-gray-900">{{ $apellido ?: 'No especificado' }}</p>
+                    </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Cédula / Identificación</span>
+                        <span class="inline-flex items-center px-3 py-1 rounded-md text-xs font-mono font-bold bg-gray-100 text-gray-800 border border-gray-200">
+                            {{ $cedulaEmp }}
+                        </span>
+                    </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Cargo / Especialidad</span>
+                        <span class="inline-flex items-center px-3 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
+                            💼 {{ $tipoNombre }}
+                        </span>
+                    </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Estado en la finca</span>
+                        @if($status)
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                🟢 Activo
                             </span>
-                            Información Personal
-                        </h2>
-                    </div>
-                    <div class="p-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500">Nombre Completo</label>
-                                    <p class="text-lg font-semibold text-gray-900">{{ $personal['Nombre'] }} {{ $personal['Apellido'] }}</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500">Cédula de Identidad</label>
-                                    <p class="text-lg text-gray-900">{{ number_format($personal['Cedula'], 0, ',', '.') }}</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500">Fecha de Nacimiento</label>
-                                    <p class="text-lg text-gray-900">
-                                        {{ date('d/m/Y', strtotime($personal['Fecha_Nacimiento'])) }}
-                                        <span class="text-sm text-gray-500">
-                                            ({{ \Carbon\Carbon::parse($personal['Fecha_Nacimiento'])->age }} años)
-                                        </span>
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500">Tipo de Trabajador</label>
-                                    <span class="inline-flex px-3 py-1 text-sm font-semibold rounded-full
-                                        @if($personal['Tipo_Trabajador'] == 'Veterinario') bg-green-100 text-green-800
-                                        @elseif($personal['Tipo_Trabajador'] == 'Técnico') bg-blue-100 text-blue-800
-                                        @elseif($personal['Tipo_Trabajador'] == 'Supervisor') bg-purple-100 text-purple-800
-                                        @else bg-gray-100 text-gray-800
-                                        @endif">
-                                        {{ $personal['Tipo_Trabajador'] }}
-                                    </span>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500">Fecha de Ingreso</label>
-                                    <p class="text-lg text-gray-900">
-                                        {{ date('d/m/Y', strtotime($personal['Fecha_Ingreso'])) }}
-                                        <span class="text-sm text-gray-500">
-                                            ({{ \Carbon\Carbon::parse($personal['Fecha_Ingreso'])->diffForHumans() }})
-                                        </span>
-                                    </p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500">Tiempo en la Empresa</label>
-                                    <p class="text-lg text-gray-900">
-                                        {{ \Carbon\Carbon::parse($personal['Fecha_Ingreso'])->diffInDays(now()) }} días
-                                        <span class="text-sm text-gray-500">
-                                            (~{{ round(\Carbon\Carbon::parse($personal['Fecha_Ingreso'])->diffInMonths(now())) }} meses)
-                                        </span>
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Información de Contacto -->
-                <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                    <div class="bg-ganaderasoft-verde text-white px-6 py-4">
-                        <h2 class="text-lg font-semibold">📞 Información de Contacto</h2>
-                    </div>
-                    <div class="p-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-500 mb-2">Teléfono</label>
-                                <div class="flex items-center">
-                                    <span class="text-lg text-gray-900">{{ $personal['Telefono'] }}</span>
-                                    <a href="tel:{{ $personal['Telefono'] }}" 
-                                       class="ml-3 text-ganaderasoft-celeste hover:text-ganaderasoft-celeste/80">
-                                        📞 Llamar
-                                    </a>
-                                </div>
-                            </div>
-                            
-                            <div>
-                                <label class="block text-sm font-medium text-gray-500 mb-2">Correo Electrónico</label>
-                                <div class="flex items-center">
-                                    <span class="text-lg text-gray-900">{{ $personal['Correo'] }}</span>
-                                    <a href="mailto:{{ $personal['Correo'] }}" 
-                                       class="ml-3 text-ganaderasoft-celeste hover:text-ganaderasoft-celeste/80">
-                                        ✉️ Email
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Información de la Finca -->
-                <div class="bg-white rounded-lg shadow-md overflow-hidden">
-                    <div class="bg-ganaderasoft-azul text-white px-6 py-4">
-                        <h2 class="text-lg font-semibold">🏡 Información de la Finca</h2>
-                    </div>
-                    <div class="p-6">
-                        @if(isset($personal['finca']))
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500 mb-2">Nombre de la Finca</label>
-                                    <p class="text-lg font-semibold text-gray-900">{{ $personal['finca']['Nombre'] }}</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500 mb-2">Ubicación</label>
-                                    <p class="text-lg text-gray-900">{{ $personal['finca']['Municipio'] }}, {{ $personal['finca']['Estado'] }}</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500 mb-2">Hectáreas</label>
-                                    <p class="text-lg text-gray-900">{{ number_format($personal['finca']['Hectareas'], 2) }} ha</p>
-                                </div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-500 mb-2">Tipo de Explotación</label>
-                                    <p class="text-lg text-gray-900">{{ $personal['finca']['id_Tipo_Explotacion'] }}</p>
-                                </div>
-                            </div>
                         @else
-                            <div class="text-center py-8">
-                                <div class="text-4xl mb-2">🏡</div>
-                                <p class="text-gray-500">No se encontró información de la finca</p>
-                            </div>
+                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-500 border border-gray-200">
+                                ⚪ Inactivo
+                            </span>
                         @endif
                     </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Fecha de nacimiento</span>
+                        <p class="text-base font-bold text-gray-900">
+                            {{ $fechaNacimiento ? date('d/m/Y', strtotime($fechaNacimiento)) : 'No especificada' }}
+                        </p>
+                    </div>
+
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">ID del registro</span>
+                        <p class="text-base font-bold text-gray-900 font-mono">#{{ $pId }}</p>
+                    </div>
                 </div>
             </div>
 
-            <!-- Panel Lateral -->
-            <div class="lg:col-span-1">
-                <!-- Acciones Rápidas -->
-                <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                    <div class="bg-gray-50 px-6 py-4 border-b">
-                        <h3 class="text-lg font-semibold text-gray-700">⚡ Acciones Rápidas</h3>
-                    </div>
-                    <div class="p-6 space-y-3">
-                        <a href="{{ route('personal-finca.edit', $personal['id_Tecnico']) }}" 
-                           class="w-full bg-ganaderasoft-verde text-white px-4 py-2 rounded-md hover:bg-ganaderasoft-verde/90 transition-colors flex items-center justify-center">
-                            ✏️ Editar Información
-                        </a>
-                        
-                        <a href="{{ route('personal-finca.index') }}" 
-                           class="w-full bg-ganaderasoft-celeste text-white px-4 py-2 rounded-md hover:bg-ganaderasoft-celeste/90 transition-colors flex items-center justify-center">
-                            📋 Ver Lista Completa
-                        </a>
-                        
-                        <form action="{{ route('personal-finca.destroy', $personal['id_Tecnico']) }}" method="POST" 
-                              onsubmit="return confirm('¿Está seguro de eliminar a este personal? Esta acción no se puede deshacer.')">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" 
-                                    class="w-full bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors flex items-center justify-center">
-                                🗑️ Eliminar Personal
-                            </button>
-                        </form>
-                    </div>
-                </div>
+            <!-- Card 2: Información de Contacto -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+                <h3 class="text-xl font-bold text-ganaderasoft-negro border-b border-gray-100 pb-3 flex items-center gap-2">
+                    <span>📞</span> Información de contacto
+                </h3>
 
-                <!-- Estadísticas del Personal -->
-                <div class="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-                    <div class="bg-gray-50 px-6 py-4 border-b">
-                        <h3 class="text-lg font-semibold text-gray-700">📊 Estadísticas</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <!-- Teléfono -->
+                    <div class="p-4 bg-gray-50/80 border border-gray-200/80 rounded-2xl flex items-center space-x-3.5">
+                        <div class="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center text-xl shrink-0">
+                            📞
+                        </div>
+                        <div class="overflow-hidden">
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-0.5">Teléfono principal</span>
+                            @if($telefonoEmp && $telefonoEmp !== '-')
+                                <a href="tel:{{ $telefonoEmp }}" class="text-base font-bold text-gray-900 hover:text-ganaderasoft-azul transition-colors truncate block">
+                                    {{ $telefonoEmp }}
+                                </a>
+                            @else
+                                <p class="text-gray-400 italic text-sm">No registrado</p>
+                            @endif
+                        </div>
                     </div>
-                    <div class="p-6 space-y-4">
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-gray-600">Días trabajados</span>
-                            <span class="font-semibold text-ganaderasoft-azul">
-                                {{ \Carbon\Carbon::parse($personal['Fecha_Ingreso'])->diffInDays(now()) }}
-                            </span>
+
+                    <!-- Correo -->
+                    <div class="p-4 bg-gray-50/80 border border-gray-200/80 rounded-2xl flex items-center space-x-3.5">
+                        <div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center text-xl shrink-0">
+                            ✉️
                         </div>
-                        
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-gray-600">Meses de experiencia</span>
-                            <span class="font-semibold text-ganaderasoft-azul">
-                                {{ round(\Carbon\Carbon::parse($personal['Fecha_Ingreso'])->diffInMonths(now())) }}
-                            </span>
-                        </div>
-                        
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-gray-600">Edad actual</span>
-                            <span class="font-semibold text-ganaderasoft-azul">
-                                {{ \Carbon\Carbon::parse($personal['Fecha_Nacimiento'])->age }} años
-                            </span>
+                        <div class="overflow-hidden">
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-0.5">Correo electrónico</span>
+                            @if($correoEmp && $correoEmp !== '-')
+                                <a href="mailto:{{ $correoEmp }}" class="text-base font-bold text-gray-900 hover:text-ganaderasoft-azul transition-colors truncate block" title="{{ $correoEmp }}">
+                                    {{ $correoEmp }}
+                                </a>
+                            @else
+                                <p class="text-gray-400 italic text-sm">No registrado</p>
+                            @endif
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <!-- Información del Registro -->
-                <div class="bg-white rounded-lg shadow-md overflow-hidden">
-                    <div class="bg-gray-50 px-6 py-4 border-b">
-                        <h3 class="text-lg font-semibold text-gray-700">📝 Información del Registro</h3>
-                    </div>
-                    <div class="p-6 space-y-3">
-                        <div>
-                            <label class="block text-xs font-medium text-gray-500">ID del Personal</label>
-                            <p class="text-sm text-gray-900">{{ $personal['id_Tecnico'] }}</p>
+        <!-- Columna Derecha: Finca y Metadatos (1 Tercio) -->
+        <div class="space-y-6">
+            <!-- Card 1: Finca Asignada -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="bg-slate-100 border-b border-slate-200 text-slate-800 px-6 py-4">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <span>🏡</span> Finca asignada
+                    </h3>
+                </div>
+
+                <div class="p-6 space-y-4">
+                    <div class="p-4 bg-teal-50/70 border border-teal-100 rounded-2xl flex items-center space-x-3.5">
+                        <div class="w-12 h-12 rounded-xl bg-white border border-teal-200 text-teal-700 font-bold flex items-center justify-center text-2xl shadow-xs shrink-0">
+                            🏡
                         </div>
-                        
-                        <div>
-                            <label class="block text-xs font-medium text-gray-500">Registrado el</label>
-                            <p class="text-sm text-gray-900">
-                                {{ date('d/m/Y H:i', strtotime($personal['created_at'] ?? date('Y-m-d H:i:s'))) }}
-                            </p>
-                        </div>
-                        
-                        <div>
-                            <label class="block text-xs font-medium text-gray-500">Última actualización</label>
-                            <p class="text-sm text-gray-900">
-                                {{ date('d/m/Y H:i', strtotime($personal['updated_at'] ?? date('Y-m-d H:i:s'))) }}
-                            </p>
+                        <div class="overflow-hidden">
+                            <p class="text-base font-bold text-gray-900 truncate">{{ $fincaNombre }}</p>
+                            <p class="text-xs text-gray-500 font-medium mt-0.5">Explotación: {{ $fincaTipo }}</p>
                         </div>
                     </div>
+
+                    @if($fincaId)
+                        <div class="pt-1">
+                            <a href="{{ route('rebanos.index', ['finca_id' => $fincaId]) }}"
+                               class="w-full py-3 bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 font-semibold rounded-xl text-sm flex items-center justify-center gap-2 transition-all shadow-2xs">
+                                <span>🐄</span> Ver rebaños de esta finca
+                            </a>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
+            <!-- Card 2: Registro del Sistema -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="bg-slate-100 border-b border-slate-200 text-slate-800 px-6 py-4">
+                    <h3 class="text-lg font-bold flex items-center gap-2">
+                        <span>⚙️</span> Registro del sistema
+                    </h3>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Identificador único</span>
+                        <p class="text-sm font-bold text-gray-900 font-mono">
+                            ID #{{ $pId ?? 'N/A' }}
+                        </p>
+                    </div>
+                    @if($fechaIngreso)
+                        <div>
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Fecha de ingreso a finca</span>
+                            <p class="text-sm font-bold text-gray-900">
+                                {{ date('d/m/Y', strtotime($fechaIngreso)) }}
+                            </p>
+                        </div>
+                    @endif
+                    <div>
+                        <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Fecha de registro</span>
+                        <p class="text-sm font-bold text-gray-900">
+                            {{ $createdAt ? date('d/m/Y H:i', strtotime($createdAt)) : 'Desconocida' }}
+                        </p>
+                    </div>
+                    @if(isset($personalFinca['updated_at']) && $personalFinca['updated_at'])
+                        <div>
+                            <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Última actualización</span>
+                            <p class="text-sm font-bold text-gray-900">
+                                {{ date('d/m/Y H:i', strtotime($personalFinca['updated_at'])) }}
+                            </p>
+                        </div>
+                    @endif
                 </div>
             </div>
         </div>
     </div>
+</div>
 @endsection

@@ -4,132 +4,99 @@ namespace App\Services\Api;
 
 use App\Services\Contracts\MedidasCorporalesServiceInterface;
 
+/**
+ * Servicio encargado de gestionar las medidas corporales (morfometría).
+ */
 class ApiMedidasCorporalesService extends BaseApiService implements MedidasCorporalesServiceInterface
 {
     /**
-     * Get list of body measurements
+     * Obtiene la lista de medidas corporales con soporte nopaginate.
+     *
+     * @param int|null $animalId
+     * @param int|null $etapaId
+     * @param bool $nopaginate
+     * @return array
      */
-    public function getMedidasCorporales(?int $animalId = null, ?int $etapaId = null): array
+    public function getMedidasCorporales(?int $animalId = null, ?int $etapaId = null, bool $nopaginate = true): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
+        $params = [
+            'animal_id' => $animalId,
+            'etapa_id'  => $etapaId,
+        ];
+
+        $response = $this->get('/medidas-corporales' . $this->buildQuery($params, $nopaginate));
+
+        if (!($response['success'] ?? false)) {
+            return ['success' => false, 'data' => [], 'message' => $response['message'] ?? 'Error al consultar medidas corporales'];
         }
 
-        $endpoint = '/medidas-corporales';
-        $params = [];
-        
-        if ($animalId) {
-            $params['animal_id'] = $animalId;
-        }
-        
-        if ($etapaId) {
-            $params['etapa_id'] = $etapaId;
-        }
-
-        if (!empty($params)) {
-            $endpoint .= '?' . http_build_query($params);
-        }
-
-        $response = $this->get($endpoint, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return ['success' => true, 'data' => $this->extractCollection($response)];
     }
 
     /**
-     * Get a single body measurement record by ID
+     * Obtiene un registro de medida corporal por ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function getMedidaCorporal(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get("/medidas-corporales/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get("/medidas-corporales/{$id}");
     }
 
     /**
-     * Create a new body measurement record
+     * Crea un nuevo registro de medidas corporales.
+     *
+     * @param array $data
+     * @return array
      */
     public function createMedidaCorporal(array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->post('/medidas-corporales', $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->post('/medidas-corporales', $data);
     }
 
     /**
-     * Update an existing body measurement record
+     * Actualiza un registro de medida corporal existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
      */
     public function updateMedidaCorporal(int $id, array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->put("/medidas-corporales/{$id}", $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->put("/medidas-corporales/{$id}", $data);
     }
 
     /**
-     * Delete a body measurement record
+     * Elimina un registro de medida corporal.
+     *
+     * @param int $id
+     * @return array
      */
     public function deleteMedidaCorporal(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
+        return $this->delete("/medidas-corporales/{$id}");
+    }
 
-        $response = $this->delete("/medidas-corporales/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
+    /**
+     * Obtiene los índices zoométricos calculados para una medición.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function getIndicesByMedida(int $id): array
+    {
+        return $this->get("/medidas-corporales/{$id}/indices");
+    }
 
-        return $response;
+    /**
+     * Obtiene la evolución histórica de índices zoométricos de un animal.
+     *
+     * @param int $animalId
+     * @return array
+     */
+    public function getEvolucionIndices(int $animalId): array
+    {
+        return $this->get("/animales/{$animalId}/indices-corporales");
     }
 }

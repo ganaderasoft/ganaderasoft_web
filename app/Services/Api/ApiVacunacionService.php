@@ -6,110 +6,59 @@ use App\Services\Contracts\VacunacionServiceInterface;
 
 class ApiVacunacionService extends BaseApiService implements VacunacionServiceInterface
 {
-    private function authHeaders(): array
-    {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
-        ];
-    }
-
+    /**
+     * Obtiene el listado de vacunaciones aplicando filtros opcionales.
+     *
+     * @param array $filters
+     * @return array
+     */
     public function getList(array $filters = []): array
     {
-        if (!session('user.token')) {
-            return ['success' => false, 'data' => []];
-        }
-
-        $query = array_filter([
-            'vacuna_id' => $filters['vacuna_id'] ?? null,
-            'rebano_id' => $filters['rebano_id'] ?? null,
-            'fecha_inicio' => $filters['fecha_inicio'] ?? null,
-            'fecha_fin' => $filters['fecha_fin'] ?? null,
-        ]);
-
-        $endpoint = '/vacunaciones' . (!empty($query) ? '?' . http_build_query($query) : '');
-        return $this->get($endpoint, $this->authHeaders());
+        return $this->get('/vacunaciones' . $this->buildQuery($filters, true));
     }
 
+    /**
+     * Obtiene el detalle de un registro de vacunación específico.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) {
-            return ['success' => false, 'data' => []];
-        }
-
-        return $this->get("/vacunaciones/{$id}", $this->authHeaders());
+        return $this->get("/vacunaciones/{$id}");
     }
 
+    /**
+     * Envía la solicitud para crear una o múltiples vacunaciones.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) {
-            return ['success' => false, 'message' => 'Usuario no autenticado'];
-        }
-
-        return $this->post('/vacunaciones', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post('/vacunaciones', $data);
     }
 
+    /**
+     * Envía la solicitud para actualizar un registro de vacunación.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) {
-            return ['success' => false, 'message' => 'Usuario no autenticado'];
-        }
-
-        return $this->put("/vacunaciones/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("/vacunaciones/{$id}", $data);
     }
 
+    /**
+     * Envía la solicitud para eliminar un registro de vacunación.
+     *
+     * @param int $id
+     * @return array
+     */
     public function eliminar(int $id): array
     {
-        if (!session('user.token')) {
-            return ['success' => false, 'message' => 'Usuario no autenticado'];
-        }
-
-        return $this->delete("/vacunaciones/{$id}", $this->authHeaders());
-    }
-
-    public function getAnimalesElegibles(array $filters): array
-    {
-        if (!session('user.token')) {
-            return ['success' => false, 'data' => []];
-        }
-
-        $query = array_filter([
-            'rebano_id' => $filters['rebano_id'] ?? null,
-            'sexo' => $filters['sexo'] ?? null,
-            'etapa_id' => $filters['etapa_id'] ?? null,
-        ]);
-
-        $endpoint = '/vacunaciones/animales-elegibles' . (!empty($query) ? '?' . http_build_query($query) : '');
-        return $this->get($endpoint, $this->authHeaders());
-    }
-
-    public function getVacunas(): array
-    {
-        if (!session('user.token')) {
-            return [];
-        }
-
-        $response = $this->get('/vacunas', $this->authHeaders());
-        return ($response['success'] ?? false) ? ($response['data'] ?? []) : [];
-    }
-
-    public function getEtapas(): array
-    {
-        if (!session('user.token')) {
-            return [];
-        }
-
-        $response = $this->get('/etapas', $this->authHeaders());
-        return ($response['success'] ?? false) ? ($response['data']['data'] ?? $response['data'] ?? []) : [];
-    }
-
-    public function getRebanos(): array
-    {
-        if (!session('user.token')) {
-            return [];
-        }
-
-        $response = $this->get('/rebanos', $this->authHeaders());
-        return ($response['success'] ?? false) ? ($response['data']['data'] ?? $response['data'] ?? []) : [];
+        return $this->delete("/vacunaciones/{$id}");
     }
 }

@@ -6,42 +6,62 @@ use App\Services\Contracts\CasaComercialServiceInterface;
 
 class ApiCasaComercialService extends BaseApiService implements CasaComercialServiceInterface
 {
-    private function authHeaders(): array
+    protected string $endpoint = '/casas-comerciales';
+
+    /**
+     * Obtiene el listado de casas comerciales registradas.
+     *
+     * @param array $params Filtros o parámetros de consulta.
+     * @return array
+     */
+    public function getAll(array $params = []): array
     {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
-        ];
+        $response = $this->get($this->endpoint . $this->buildQuery($params, true));
+        return $this->extractCollection($response);
     }
 
-    public function getList(?string $laboratorio = null): array
-    {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        $endpoint = '/casas-comerciales' . ($laboratorio ? '?laboratorio=' . urlencode($laboratorio) : '');
-        return $this->get($endpoint, $this->authHeaders());
-    }
-
+    /**
+     * Obtiene el detalle de una casa comercial por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        return $this->get("/casas-comerciales/{$id}", $this->authHeaders());
+        return $this->get("{$this->endpoint}/{$id}");
     }
 
+    /**
+     * Registra una nueva casa comercial.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->post('/casas-comerciales', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post($this->endpoint, $data);
     }
 
+    /**
+     * Actualiza una casa comercial existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->put("/casas-comerciales/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("{$this->endpoint}/{$id}", $data);
     }
 
-    public function eliminar(int $id): array
+    /**
+     * Elimina una casa comercial por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function deleteItem(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->delete("/casas-comerciales/{$id}", $this->authHeaders());
+        return $this->delete("{$this->endpoint}/{$id}");
     }
 }

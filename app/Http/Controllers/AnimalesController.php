@@ -9,6 +9,9 @@ use Illuminate\Http\Request;
 
 class AnimalesController extends Controller
 {
+    /**
+     * Inyecta los servicios necesarios para el controlador de animales.
+     */
     public function __construct(
         protected AnimalesServiceInterface $animalesService,
         protected RebanosServiceInterface  $rebanosService,
@@ -16,97 +19,143 @@ class AnimalesController extends Controller
     ) {}
 
     /**
-     * Display a listing of animals
+     * Muestra el listado principal de animales.
+     * Carga rebaños y fincas para los filtros y aplica mapeo de datos.
+     *
+     * @param Request $request
+     * @return \Illuminate\View\View
      */
     public function index(Request $request)
     {
-        $idFinca  = $request->query('id_finca')  ? (int) $request->query('id_finca')  : null;
-        $idRebano = $request->query('id_rebano') ? (int) $request->query('id_rebano') : null;
-        $sexo     = $request->query('sexo', '');
-        $nombre   = $request->query('nombre', '');
+        $idFinca   = $request->query('finca_id')  ? (int) $request->query('finca_id')  : null;
+        $idRebano  = $request->query('rebano_id') ? (int) $request->query('rebano_id') : null;
+        $sexo      = $request->query('sexo', '');
+        $nombre    = $request->query('nombre', '');
+        
+        $incluirArchivados = $request->boolean('incluir_archivados');
+        $hasArchivado      = $request->has('archivado');
+        $archivado         = $hasArchivado ? $request->boolean('archivado') : null;
 
-        // Load all animales (client-side filtering for finca/sexo/nombre)
-        $response = $this->animalesService->getAnimales($idRebano);
-        $animales = ($response['success'] ?? false) ? ($response['data']['data'] ?? []) : [];
+        // Cargar todos los animales (activos y archivados) para permitir filtrado reactivo e instantáneo en la vista
+        $response = $this->animalesService->getAnimales(null, ['incluir_archivados' => true]);
+        $animales = ($response['success'] ?? false) ? ($response['data']['data'] ?? $response['data'] ?? []) : [];
 
-        $rebanosResponse = $this->rebanosService->getRebanos();
-        $rebanos = ($rebanosResponse['success'] ?? false) ? ($rebanosResponse['data']['data'] ?? []) : [];
+        // Cargar catálogos auxiliares (rebaños y fincas completos)
+        $rebanosResponse = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        $rebanos = ($rebanosResponse['success'] ?? false) ? ($rebanosResponse['data']['data'] ?? $rebanosResponse['data'] ?? []) : [];
 
-        $fincasResponse = $this->fincasService->getFincas();
+        $fincasResponse = $this->fincasService->getFincas(['incluir_archivados' => true]);
         $fincas = ($fincasResponse['success'] ?? false) ? ($fincasResponse['data']['data'] ?? $fincasResponse['data'] ?? []) : [];
 
-        // Build rebano→finca map for JS
-        $mapaRebanoFinca = collect($rebanos)->keyBy('id_Rebano')->map(fn($r) => $r['id_Finca'] ?? null)->all();
+        // Si se especificó un rebaño pero no la finca, inferir automáticamente la finca correspondiente
+        if ($idRebano && !$idFinca) {
+            $rebanoObj = collect($rebanos)->firstWhere('id', $idRebano);
+            if ($rebanoObj) {
+                $idFinca = $rebanoObj['finca_id'] ?? data_get($rebanoObj, 'finca.id') ?? ($rebanoObj['id_Finca'] ?? null);
+            }
+        }
 
-        // Estadísticas sobre los animales cargados
+        // Si no se pasó explícitamente el parámetro 'archivado', inferirlo según el rebaño o finca consultados
+        if ($archivado === null) {
+            if ($idRebano) {
+                $rebanoObj = collect($rebanos)->firstWhere('id', $idRebano);
+                $archivado = (!empty($rebanoObj['archivado'])) ? true : false;
+            } elseif ($idFinca) {
+                $fincaObj = collect($fincas)->firstWhere('id', $idFinca);
+                $archivado = (!empty($fincaObj['archivado'])) ? true : false;
+            } else {
+                $archivado = false;
+            }
+        }
+
+        // Construir mapas para validaciones, visualización y filtros en Javascript (UI)
+        $mapaRebanoFinca = collect($rebanos)->mapWithKeys(function ($r) {
+            $fId = $r['finca_id'] ?? data_get($r, 'finca.id') ?? ($r['id_Finca'] ?? null);
+            return [$r['id'] => $fId];
+        })->all();
+        $mapaFincaNombres = collect($fincas)->keyBy('id')->map(fn($f) => $f['nombre'] ?? ('Finca #' . $f['id']))->all();
+        $mapaRebanoNombres = collect($rebanos)->keyBy('id')->map(fn($r) => $r['nombre'] ?? ('Rebaño #' . $r['id']))->all();
+
+        // Calcular estadísticas básicas en memoria sobre todos los animales
         $estadisticas = [
             'total'     => count($animales),
-            'machos'    => count(array_filter($animales, fn($a) => ($a['Sexo'] ?? '') === 'M')),
-            'hembras'   => count(array_filter($animales, fn($a) => ($a['Sexo'] ?? '') === 'F')),
+            'machos'    => count(array_filter($animales, fn($a) => strtoupper((string)($a['sexo'] ?? '')) === 'M')),
+            'hembras'   => count(array_filter($animales, fn($a) => strtoupper((string)($a['sexo'] ?? '')) === 'H')),
             'activos'   => count(array_filter($animales, fn($a) => !($a['archivado'] ?? false))),
+            'archivados'=> count(array_filter($animales, fn($a) => (bool)($a['archivado'] ?? false))),
         ];
 
         return view('animales.index', compact(
             'animales', 'rebanos', 'fincas',
-            'idFinca', 'idRebano', 'sexo', 'nombre',
-            'mapaRebanoFinca', 'estadisticas'
+            'idFinca', 'idRebano', 'sexo', 'nombre', 'archivado', 'incluirArchivados',
+            'mapaRebanoFinca', 'mapaFincaNombres', 'mapaRebanoNombres', 'estadisticas'
         ));
     }
 
     /**
-     * Show the form for creating a new animal
+     * Muestra el formulario para registrar un nuevo animal.
+     * Carga todos los catálogos requeridos (rebaños, razas, estados y etapas iniciales).
+     *
+     * @return \Illuminate\View\View
      */
     public function create()
     {
         $rebanosResponse = $this->rebanosService->getRebanos();
-        $rebanos = $rebanosResponse['success'] ? ($rebanosResponse['data']['data'] ?? []) : [];
+        $rebanos = ($rebanosResponse['success'] ?? false) ? ($rebanosResponse['data']['data'] ?? $rebanosResponse['data'] ?? []) : [];
 
         $razasResponse = $this->animalesService->getRazas();
-        $razas = $razasResponse['success'] ? ($razasResponse['data'] ?? []) : [];
+        $razas = ($razasResponse['success'] ?? false) ? ($razasResponse['data']['data'] ?? $razasResponse['data'] ?? []) : [];
+        $razas = collect($razas)->sortBy('nombre', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
 
         $estadosResponse = $this->animalesService->getEstadosSalud();
-        $estadosData = $estadosResponse['success'] ? ($estadosResponse['data'] ?? []) : [];
-        // Ensure $estados is always an array of arrays, filtering out non-array elements
-        $estados = is_array($estadosData) ? array_filter($estadosData['data'], 'is_array') : [];
+        $estados = ($estadosResponse['success'] ?? false) ? ($estadosResponse['data']['data'] ?? $estadosResponse['data'] ?? []) : [];
 
-        $etapasResponse = $this->animalesService->getEtapas();
-        $etapasData = $etapasResponse['success'] ? ($etapasResponse['data'] ?? []) : [];
-        // Ensure $etapas is always an array of arrays, filtering out non-array elements
-        $etapas = is_array($etapasData) ? array_filter($etapasData, 'is_array') : [];
-
-        return view('animales.create', compact('rebanos', 'razas', 'estados', 'etapas'));
+        return view('animales.create', compact('rebanos', 'razas', 'estados'));
     }
 
     /**
-     * Store a newly created animal in storage
+     * Procesa la solicitud para crear un nuevo animal en el sistema.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function store(Request $request)
     {
         $validatedData = $request->validate([
-            'id_Rebano' => 'required|integer',
-            'Nombre' => 'required|string|max:255',
+            'rebano_id' => 'required|integer',
+            'nombre' => 'required|string|max:255',
             'codigo_animal' => 'required|string|max:50',
-            'Sexo' => 'required|in:M,F',
+            'sexo' => 'required|in:M,H',
             'fecha_nacimiento' => 'required|date',
-            'Procedencia' => 'required|string|max:255',
-            'fk_composicion_raza' => 'required|integer',
-            'estado_inicial.estado_id' => 'required|integer',
-            'estado_inicial.fecha_ini' => 'required|date',
-            'etapa_inicial.etapa_id' => 'required|integer',
-            'etapa_inicial.fecha_ini' => 'required|date',
+            'procedencia' => 'required|string|max:255',
+            'composicion_raza_id' => 'required|integer',
+            'estado_inicial.estado_salud_id' => 'required|integer',
         ], [
-            'id_Rebano.required' => 'Debe seleccionar un rebaño',
-            'Nombre.required' => 'El nombre del animal es requerido',
+            'rebano_id.required' => 'Debe seleccionar un rebaño',
+            'nombre.required' => 'El nombre del animal es requerido',
             'codigo_animal.required' => 'El código del animal es requerido',
-            'Sexo.required' => 'El sexo del animal es requerido',
+            'sexo.required' => 'El sexo del animal es requerido',
             'fecha_nacimiento.required' => 'La fecha de nacimiento es requerida',
-            'Procedencia.required' => 'La procedencia es requerida',
-            'fk_composicion_raza.required' => 'Debe seleccionar una raza',
-            'estado_inicial.estado_id.required' => 'Debe seleccionar un estado de salud inicial',
-            'etapa_inicial.etapa_id.required' => 'Debe seleccionar una etapa inicial',
+            'procedencia.required' => 'La procedencia es requerida',
+            'composicion_raza_id.required' => 'Debe seleccionar una raza',
+            'estado_inicial.estado_salud_id.required' => 'Debe seleccionar un estado de salud inicial',
         ]);
 
-        $response = $this->animalesService->createAnimal($validatedData);
+        $payload = [
+            'rebano_id' => (int) $validatedData['rebano_id'],
+            'nombre' => $validatedData['nombre'],
+            'codigo_animal' => $validatedData['codigo_animal'],
+            'sexo' => $validatedData['sexo'],
+            'fecha_nacimiento' => $validatedData['fecha_nacimiento'],
+            'procedencia' => $validatedData['procedencia'],
+            'composicion_raza_id' => (int) $validatedData['composicion_raza_id'],
+            'estado_inicial' => [
+                'estado_salud_id' => (int) $validatedData['estado_inicial']['estado_salud_id'],
+                'fecha_ini' => $validatedData['fecha_nacimiento'],
+            ],
+        ];
+
+        $response = $this->animalesService->createAnimal($payload);
 
         if (!$response['success']) {
             return redirect()->back()
@@ -119,7 +168,10 @@ class AnimalesController extends Controller
     }
 
     /**
-     * Display the specified animal
+     * Muestra los detalles biográficos específicos de un animal.
+     *
+     * @param int $id
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
     public function show(int $id)
     {
@@ -135,7 +187,11 @@ class AnimalesController extends Controller
     }
 
     /**
-     * Show the form for editing the specified animal
+     * Muestra el formulario para editar el perfil biográfico base del animal.
+     * NOTA: No incluye estados ni etapas, ya que son recursos independientes.
+     *
+     * @param int $id
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
     public function edit(int $id)
     {
@@ -147,56 +203,45 @@ class AnimalesController extends Controller
 
         $animal = $response['data'] ?? null;
 
-        $rebanosResponse = $this->rebanosService->getRebanos();
-        $rebanos = $rebanosResponse['success'] ? ($rebanosResponse['data']['data'] ?? []) : [];
+        $rebanosResponse = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        $rebanos = ($rebanosResponse['success'] ?? false) ? ($rebanosResponse['data']['data'] ?? $rebanosResponse['data'] ?? []) : [];
 
         $razasResponse = $this->animalesService->getRazas();
-        $razas = $razasResponse['success'] ? ($razasResponse['data'] ?? []) : [];
+        $razas = ($razasResponse['success'] ?? false) ? ($razasResponse['data']['data'] ?? $razasResponse['data'] ?? []) : [];
+        $razas = collect($razas)->sortBy('nombre', SORT_NATURAL | SORT_FLAG_CASE)->values()->all();
 
-        $estadosResponse = $this->animalesService->getEstadosSalud();
-        $estadosData = $estadosResponse['success'] ? ($estadosResponse['data'] ?? []) : [];
-        // Ensure $estados is always an array of arrays, filtering out non-array elements
-        $estados = is_array($estadosData) ? array_filter($estadosData['data'], 'is_array') : [];
-
-        $etapasResponse = $this->animalesService->getEtapas();
-        $etapasData = $etapasResponse['success'] ? ($etapasResponse['data'] ?? []) : [];
-        // Ensure $etapas is always an array of arrays, filtering out non-array elements
-        $etapas = is_array($etapasData) ? array_filter($etapasData, 'is_array') : [];
-
-        return view('animales.edit', compact('animal', 'rebanos', 'razas', 'estados', 'etapas'));
+        return view('animales.edit', compact('animal', 'rebanos', 'razas'));
     }
 
     /**
-     * Update the specified animal in storage
+     * Procesa la actualización del perfil del animal en el sistema.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function update(Request $request, int $id)
     {
         $validatedData = $request->validate([
-            'id_Rebano' => 'required|integer',
-            'Nombre' => 'required|string|max:255',
+            'rebano_id' => 'required|integer',
+            'nombre' => 'required|string|max:255',
             'codigo_animal' => 'required|string|max:50',
-            'Sexo' => 'required|in:M,F',
+            'sexo' => 'required|in:M,H',
             'fecha_nacimiento' => 'required|date',
-            'Procedencia' => 'required|string|max:255',
-            'fk_composicion_raza' => 'required|integer',
+            'procedencia' => 'required|string|max:255',
+            'composicion_raza_id' => 'required|integer',
             'archivado' => 'boolean',
-            'estado_inicial.estado_id' => 'required|integer',
-            'estado_inicial.fecha_ini' => 'required|date',
-            'etapa_inicial.etapa_id' => 'required|integer',
-            'etapa_inicial.fecha_ini' => 'required|date',
         ], [
-            'id_Rebano.required' => 'Debe seleccionar un rebaño',
-            'Nombre.required' => 'El nombre del animal es requerido',
+            'rebano_id.required' => 'Debe seleccionar un rebaño',
+            'nombre.required' => 'El nombre del animal es requerido',
             'codigo_animal.required' => 'El código del animal es requerido',
-            'Sexo.required' => 'El sexo del animal es requerido',
+            'sexo.required' => 'El sexo del animal es requerido',
             'fecha_nacimiento.required' => 'La fecha de nacimiento es requerida',
-            'Procedencia.required' => 'La procedencia es requerida',
-            'fk_composicion_raza.required' => 'Debe seleccionar una raza',
-            'estado_inicial.estado_id.required' => 'Debe seleccionar un estado de salud',
-            'etapa_inicial.etapa_id.required' => 'Debe seleccionar una etapa',
+            'procedencia.required' => 'La procedencia es requerida',
+            'composicion_raza_id.required' => 'Debe seleccionar una raza',
         ]);
 
-        // Ensure archivado is set
+        // Asegurarse de que el campo archivado se envíe correctamente (V2)
         $validatedData['archivado'] = $request->has('archivado') ? true : false;
 
         $response = $this->animalesService->updateAnimal($id, $validatedData);
@@ -210,4 +255,159 @@ class AnimalesController extends Controller
         return redirect()->route('animales.index')
             ->with('success', '¡Animal actualizado exitosamente!');
     }
+
+    /**
+     * Muestra el formulario para importar animales masivamente mediante CSV o TXT.
+     *
+     * @param Request $request
+     * @return \Illuminate\View\View
+     */
+    public function importarForm(Request $request)
+    {
+        $fincasResponse = $this->fincasService->getFincas();
+        $fincas = ($fincasResponse['success'] ?? false) ? ($fincasResponse['data']['data'] ?? $fincasResponse['data'] ?? []) : [];
+        $idFinca = $request->query('finca_id') ?? session('selected_finca')['id'] ?? null;
+
+        return view('animales.importar', compact('fincas', 'idFinca'));
+    }
+
+    /**
+     * Procesa la importación masiva de animales.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function importar(Request $request)
+    {
+        $request->validate([
+            'finca_id' => 'required|integer',
+            'archivo'  => 'required|file|max:10240',
+        ], [
+            'finca_id.required' => 'Debe seleccionar una finca de destino para los animales.',
+            'finca_id.integer'  => 'El identificador de la finca debe ser numérico.',
+            'archivo.required'  => 'Debe seleccionar un archivo .csv o .txt para procesar.',
+            'archivo.file'      => 'El elemento subido no es un archivo válido.',
+            'archivo.max'       => 'El tamaño del archivo no debe exceder los 10MB.',
+        ]);
+
+        $response = $this->animalesService->importarAnimales(
+            (int) $request->input('finca_id'),
+            $request->file('archivo')
+        );
+
+        if ($response['success'] ?? false) {
+            return redirect()->route('animales.index', ['finca_id' => $request->input('finca_id')])
+                ->with('success', $response['message'] ?? 'Animales importados exitosamente.');
+        }
+
+        $errorMessage = $response['message'] ?? 'Ocurrió un error al procesar el archivo.';
+        $importErrors = $response['errors']['filas'] ?? ($response['errors'] ?? []);
+
+        return redirect()->back()
+            ->withInput()
+            ->with('error', $errorMessage)
+            ->with('import_errors', (array)$importErrors);
+    }
+
+    /**
+     * Genera y descarga un archivo CSV de ejemplo con encabezados y filas de muestra.
+     *
+     * @param Request $request
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    public function descargarPlantilla(Request $request)
+    {
+        $delimitador = $request->query('delimitador') === 'punto_coma' ? ';' : ',';
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="plantilla_animales.csv"',
+        ];
+
+        $columns = ['codigo_animal', 'nombre', 'sexo', 'fecha_nacimiento', 'procedencia', 'rebano', 'raza', 'estado_salud', 'peso'];
+        $samples = [
+            ['AN-001', 'Vaca Mariposa', 'H', '2023-03-15', 'Local', 'Lote Produccion A', 'Holstein', 'Sano', '420'],
+            ['AN-002', 'Toro Titan', 'M', '2022-11-20', 'Compra', 'Lote Reproduccion', 'Brahman', 'Sano', '550'],
+            ['AN-003', 'Becerra Princesa', 'H', '2024-01-10', 'Nacimiento', 'Lote Cria', 'Carora', 'Sano', '110'],
+        ];
+
+        $callback = function () use ($columns, $samples, $delimitador) {
+            $file = fopen('php://output', 'w');
+            // Inyectar BOM UTF-8 para compatibilidad transparente con Excel
+            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fputcsv($file, $columns, $delimitador);
+            foreach ($samples as $sample) {
+                fputcsv($file, $sample, $delimitador);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Archiva un animal activo.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function archive(Request $request, $id)
+    {
+        $response = $this->animalesService->archiveAnimal((int) $id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->back()->with('success', $response['message'] ?? 'Animal archivado exitosamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al archivar el animal.');
+    }
+
+    /**
+     * Desarchiva un animal archivado a estado activo.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function unarchive(Request $request, $id)
+    {
+        $response = $this->animalesService->unarchiveAnimal((int) $id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->back()->with('success', $response['message'] ?? 'Animal desarchivado exitosamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al desarchivar el animal.');
+    }
+
+    /**
+     * Restaura un animal archivado (alias de desarchivar).
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function restore(Request $request, $id)
+    {
+        return $this->unarchive($request, $id);
+    }
+
+    /**
+     * Elimina definitivamente un animal del sistema.
+     *
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function destroy(Request $request, $id)
+    {
+        $response = $this->animalesService->deleteAnimal((int) $id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->route('animales.index')->with('success', $response['message'] ?? 'Animal eliminado definitivamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al eliminar el animal.');
+    }
 }
+

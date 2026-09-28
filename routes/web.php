@@ -4,7 +4,6 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FincasController;
 use App\Http\Controllers\RebanosController;
-use App\Http\Controllers\PersonalController;
 use App\Http\Controllers\PersonalFincaController;
 use App\Http\Controllers\CambiosAnimalController;
 use App\Http\Controllers\AnimalesController;
@@ -24,22 +23,32 @@ use App\Http\Controllers\VacunacionController;
 use App\Http\Controllers\CasaComercialController;
 use App\Http\Controllers\ArbolGenController;
 use App\Http\Controllers\MovimientoRebanoController;
+use App\Http\Controllers\ReportesController;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\TipoTrabajadorController;
+use App\Http\Controllers\TipoAnimalController;
+use App\Http\Controllers\ComposicionRazaController;
+use App\Http\Controllers\AdminComposicionRazaController;
+use App\Http\Controllers\EtapaController;
+use App\Http\Controllers\EstadoSaludController;
+use App\Http\Controllers\DiaPalpacionController;
+use App\Http\Controllers\FoliculoController;
+use App\Http\Controllers\StorageProxyController;
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
-|
 */
 
-// Redirect root to login
+// Proxy para archivos estáticos de storage del backend
+Route::get('/storage/{path}', [StorageProxyController::class, 'show'])->where('path', '.*')->name('storage.proxy');
+
+// Root route returns welcome view
 Route::get('/', function () {
-    return redirect()->route('login');
+    return view('welcome');
 });
 
 // Auth routes
@@ -50,14 +59,23 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 // Protected routes
 Route::middleware(['mock.auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/perfil', [AuthController::class, 'profile'])->name('profile');
+    Route::post('/perfil/foto', [AuthController::class, 'updatePhoto'])->name('profile.photo.update');
+    Route::delete('/perfil/foto', [AuthController::class, 'deletePhoto'])->name('profile.photo.delete');
     
     // Fincas routes
     Route::get('/fincas', [FincasController::class, 'index'])->name('fincas.index');
+    Route::get('/fincas/importar', [FincasController::class, 'importarForm'])->name('fincas.importar');
+    Route::post('/fincas/importar', [FincasController::class, 'importar'])->name('fincas.importar.procesar');
+    Route::get('/fincas/plantilla-csv', [FincasController::class, 'descargarPlantilla'])->name('fincas.importar.plantilla');
     Route::get('/fincas/create', [FincasController::class, 'create'])->name('fincas.create');
     Route::post('/fincas', [FincasController::class, 'store'])->name('fincas.store');
+    Route::get('/fincas/{id}', [FincasController::class, 'show'])->name('fincas.show');
     Route::get('/fincas/{id}/edit', [FincasController::class, 'edit'])->name('fincas.edit');
     Route::put('/fincas/{id}', [FincasController::class, 'update'])->name('fincas.update');
-    Route::get('/fincas/{id}/dashboard', [FincasController::class, 'dashboard'])->name('fincas.dashboard');
+    Route::match(['POST', 'PATCH'], '/fincas/{id}/archivar', [FincasController::class, 'archive'])->name('fincas.archivar');
+    Route::match(['POST', 'PATCH'], '/fincas/{id}/desarchivar', [FincasController::class, 'unarchive'])->name('fincas.desarchivar');
+    Route::delete('/fincas/{id}', [FincasController::class, 'destroy'])->name('fincas.destroy');
     
     // Rebaños routes
     Route::get('/rebanos', [RebanosController::class, 'index'])->name('rebanos.index');
@@ -65,13 +83,9 @@ Route::middleware(['mock.auth'])->group(function () {
     Route::post('/rebanos', [RebanosController::class, 'store'])->name('rebanos.store');
     Route::get('/rebanos/{id}/edit', [RebanosController::class, 'edit'])->name('rebanos.edit');
     Route::put('/rebanos/{id}', [RebanosController::class, 'update'])->name('rebanos.update');
-    
-    // Personal routes
-    Route::get('/personal', [PersonalController::class, 'index'])->name('personal.index');
-    Route::get('/personal/create', [PersonalController::class, 'create'])->name('personal.create');
-    Route::post('/personal', [PersonalController::class, 'store'])->name('personal.store');
-    Route::get('/personal/{id}/edit', [PersonalController::class, 'edit'])->name('personal.edit');
-    Route::put('/personal/{id}', [PersonalController::class, 'update'])->name('personal.update');
+    Route::match(['POST', 'PATCH'], '/rebanos/{id}/archivar', [RebanosController::class, 'archive'])->name('rebanos.archivar');
+    Route::match(['POST', 'PATCH'], '/rebanos/{id}/desarchivar', [RebanosController::class, 'unarchive'])->name('rebanos.desarchivar');
+    Route::delete('/rebanos/{id}', [RebanosController::class, 'destroy'])->name('rebanos.destroy');
     
     // Árbol genealógico
     Route::get('/animales/{id}/arbol', [ArbolGenController::class, 'show'])->name('arbol-gen.show');
@@ -81,11 +95,17 @@ Route::middleware(['mock.auth'])->group(function () {
 
     // Animales routes
     Route::get('/animales', [AnimalesController::class, 'index'])->name('animales.index');
+    Route::get('/animales/importar', [AnimalesController::class, 'importarForm'])->name('animales.importar');
+    Route::post('/animales/importar', [AnimalesController::class, 'importar'])->name('animales.importar.procesar');
+    Route::get('/animales/plantilla-csv', [AnimalesController::class, 'descargarPlantilla'])->name('animales.plantilla');
     Route::get('/animales/create', [AnimalesController::class, 'create'])->name('animales.create');
     Route::post('/animales', [AnimalesController::class, 'store'])->name('animales.store');
     Route::get('/animales/{id}', [AnimalesController::class, 'show'])->name('animales.show');
     Route::get('/animales/{id}/edit', [AnimalesController::class, 'edit'])->name('animales.edit');
     Route::put('/animales/{id}', [AnimalesController::class, 'update'])->name('animales.update');
+    Route::match(['POST', 'PATCH'], '/animales/{id}/archivar', [AnimalesController::class, 'archive'])->name('animales.archivar');
+    Route::match(['POST', 'PATCH'], '/animales/{id}/desarchivar', [AnimalesController::class, 'unarchive'])->name('animales.desarchivar');
+    Route::delete('/animales/{id}', [AnimalesController::class, 'destroy'])->name('animales.destroy');
     
     // Lactancia routes - Gestión de períodos de lactancia
     Route::get('/lactancia', [LactanciaController::class, 'index'])->name('lactancia.index');
@@ -131,6 +151,8 @@ Route::middleware(['mock.auth'])->group(function () {
     Route::get('/personal-finca/{id}', [PersonalFincaController::class, 'show'])->name('personal-finca.show');
     Route::get('/personal-finca/{id}/edit', [PersonalFincaController::class, 'edit'])->name('personal-finca.edit');
     Route::put('/personal-finca/{id}', [PersonalFincaController::class, 'update'])->name('personal-finca.update');
+    Route::match(['POST', 'PATCH'], '/personal-finca/{id}/enable', [PersonalFincaController::class, 'enable'])->name('personal-finca.enable');
+    Route::match(['POST', 'PATCH'], '/personal-finca/{id}/disable', [PersonalFincaController::class, 'disable'])->name('personal-finca.disable');
     Route::delete('/personal-finca/{id}', [PersonalFincaController::class, 'destroy'])->name('personal-finca.destroy');
     
     // Cambios de Animal routes - Historial de cambios y desarrollo
@@ -207,14 +229,6 @@ Route::middleware(['mock.auth'])->group(function () {
     Route::put('/tratamiento/{id}', [TratamientoController::class, 'update'])->name('tratamiento.update');
     Route::delete('/tratamiento/{id}', [TratamientoController::class, 'destroy'])->name('tratamiento.destroy');
 
-    // Vacunas
-    Route::get('/vacunas', [VacunaController::class, 'index'])->name('vacuna.index');
-    Route::get('/vacunas/create', [VacunaController::class, 'create'])->name('vacuna.create');
-    Route::post('/vacunas', [VacunaController::class, 'store'])->name('vacuna.store');
-    Route::get('/vacunas/{id}', [VacunaController::class, 'show'])->name('vacuna.show');
-    Route::get('/vacunas/{id}/edit', [VacunaController::class, 'edit'])->name('vacuna.edit');
-    Route::put('/vacunas/{id}', [VacunaController::class, 'update'])->name('vacuna.update');
-    Route::delete('/vacunas/{id}', [VacunaController::class, 'destroy'])->name('vacuna.destroy');
 
     // Vacunación (modelo sanitario principal)
     Route::get('/vacunaciones', [VacunacionController::class, 'index'])->name('vacunacion.index');
@@ -226,14 +240,6 @@ Route::middleware(['mock.auth'])->group(function () {
     Route::put('/vacunaciones/{id}', [VacunacionController::class, 'update'])->name('vacunacion.update');
     Route::delete('/vacunaciones/{id}', [VacunacionController::class, 'destroy'])->name('vacunacion.destroy');
 
-    // Casas Comerciales
-    Route::get('/casas-comerciales', [CasaComercialController::class, 'index'])->name('casa-comercial.index');
-    Route::get('/casas-comerciales/create', [CasaComercialController::class, 'create'])->name('casa-comercial.create');
-    Route::post('/casas-comerciales', [CasaComercialController::class, 'store'])->name('casa-comercial.store');
-    Route::get('/casas-comerciales/{id}', [CasaComercialController::class, 'show'])->name('casa-comercial.show');
-    Route::get('/casas-comerciales/{id}/edit', [CasaComercialController::class, 'edit'])->name('casa-comercial.edit');
-    Route::put('/casas-comerciales/{id}', [CasaComercialController::class, 'update'])->name('casa-comercial.update');
-    Route::delete('/casas-comerciales/{id}', [CasaComercialController::class, 'destroy'])->name('casa-comercial.destroy');
 
     // ===================== MOVIMIENTOS DE REBAÑO =====================
     Route::get('/movimiento-rebano', [MovimientoRebanoController::class, 'index'])->name('movimiento-rebano.index');
@@ -243,4 +249,52 @@ Route::middleware(['mock.auth'])->group(function () {
     Route::get('/movimiento-rebano/{id}/edit', [MovimientoRebanoController::class, 'edit'])->name('movimiento-rebano.edit');
     Route::put('/movimiento-rebano/{id}', [MovimientoRebanoController::class, 'update'])->name('movimiento-rebano.update');
     Route::delete('/movimiento-rebano/{id}', [MovimientoRebanoController::class, 'destroy'])->name('movimiento-rebano.destroy');
+
+    // ===================== MÓDULO DE RAZAS (Operativo) =====================
+    Route::resource('razas', ComposicionRazaController::class);
+
+    // ===================== MÓDULO DE REPORTES =====================
+    Route::get('/reportes/general', [ReportesController::class, 'indexGeneral'])->name('reportes.general');
+    Route::get('/reportes/lactancias', [ReportesController::class, 'indexLactancias'])->name('reportes.lactancias');
+    Route::get('/reportes/reproductivo', [ReportesController::class, 'indexReproductivo'])->name('reportes.reproductivo');
+    Route::get('/reportes/pesaje-leche', [ReportesController::class, 'indexPesajeLeche'])->name('reportes.pesaje-leche');
 });
+
+// ===================== MÓDULO DE ADMINISTRACIÓN =====================
+Route::middleware(['mock.auth', 'has.role:global_admin,admin'])->prefix('admin')->name('admin.')->group(function () {
+    // Dashboard Admin
+    Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('dashboard');
+
+    // Gestión de usuarios
+    Route::get('/users', [UserController::class, 'index'])->name('users.index');
+    Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
+    Route::post('/users', [UserController::class, 'store'])->name('users.store');
+    Route::get('/users/{id}', [UserController::class, 'show'])->name('users.show');
+    Route::get('/users/{id}/edit', [UserController::class, 'edit'])->name('users.edit');
+    Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::match(['POST', 'PATCH'], '/users/{id}/enable', [UserController::class, 'enable'])->name('users.enable');
+    Route::match(['POST', 'PATCH'], '/users/{id}/disable', [UserController::class, 'disable'])->name('users.disable');
+
+    // Catálogos Maestros (Rutas Limpias e Independientes)
+    Route::resource('tipos-trabajador', TipoTrabajadorController::class);
+    Route::resource('tipos-animal', TipoAnimalController::class);
+    Route::resource('etapas', EtapaController::class);
+    Route::resource('estados-salud', EstadoSaludController::class);
+    Route::resource('dias-palpacion', DiaPalpacionController::class);
+    Route::resource('foliculos', FoliculoController::class);
+    Route::resource('vacunas', VacunaController::class);
+    Route::resource('casas-comerciales', CasaComercialController::class);
+    Route::resource('razas', AdminComposicionRazaController::class);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Ruta Fallback (Error 404)
+|--------------------------------------------------------------------------
+| Captura cualquier petición web a una URL no definida para renderizar
+| la vista de error 404 manteniendo activo el pipeline de sesión (cookies, auth).
+*/
+Route::fallback(function () {
+    return response()->view('errors.404', [], 404);
+})->name('fallback.404');

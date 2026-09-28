@@ -4,140 +4,81 @@ namespace App\Services\Api;
 
 use App\Services\Contracts\LactanciaServiceInterface;
 
+/**
+ * Servicio encargado de gestionar los períodos de lactancia.
+ */
 class ApiLactanciaService extends BaseApiService implements LactanciaServiceInterface
 {
     /**
-     * Get list of lactation periods
+     * Obtiene el listado de períodos de lactancia con filtros opcionales.
+     *
+     * @param int|null $animalId
+     * @param bool|null $activa
+     * @param string|null $fechaInicio
+     * @param string|null $fechaFin
+     * @param bool $nopaginate
+     * @return array
      */
-    public function getLactancias(?int $animalId = null, ?bool $activa = null, ?string $fechaInicio = null, ?string $fechaFin = null): array
+    public function getLactancias(?int $animalId = null, ?bool $activa = null, ?string $fechaInicio = null, ?string $fechaFin = null, bool $nopaginate = true): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
+        $params = [
+            'animal_id'    => $animalId,
+            'activa'       => $activa !== null ? ($activa ? 1 : 0) : null,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+        ];
+
+        $response = $this->get('/lactancia' . $this->buildQuery($params, $nopaginate));
+
+        if (!($response['success'] ?? false)) {
+            return ['success' => false, 'data' => [], 'message' => $response['message'] ?? 'Error al consultar lactancias'];
         }
 
-        $endpoint = '/lactancia';
-        $params = [];
-        
-        if ($animalId) {
-            $params['animal_id'] = $animalId;
-        }
-        
-        if ($activa !== null) {
-            $params['activa'] = $activa ? 1 : 0;
-        }
-        
-        if ($fechaInicio) {
-            $params['fecha_inicio'] = $fechaInicio;
-        }
-        
-        if ($fechaFin) {
-            $params['fecha_fin'] = $fechaFin;
-        }
-
-        if (!empty($params)) {
-            $endpoint .= '?' . http_build_query($params);
-        }
-
-        $response = $this->get($endpoint, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return ['success' => true, 'data' => $this->extractCollection($response)];
     }
 
     /**
-     * Get a single lactation period by ID
+     * Obtiene los detalles de un período de lactancia específico por su ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function getLactancia(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get("/lactancia/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get("/lactancia/{$id}");
     }
 
     /**
-     * Create a new lactation period
+     * Registra un nuevo período de lactancia.
+     *
+     * @param array $data
+     * @return array
      */
     public function createLactancia(array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->post('/lactancia', $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->post('/lactancia', $data);
     }
 
     /**
-     * Update an existing lactation period
+     * Actualiza un período de lactancia existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
      */
     public function updateLactancia(int $id, array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->put("/lactancia/{$id}", $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->put("/lactancia/{$id}", $data);
     }
 
     /**
-     * Delete a lactation period
+     * Elimina un período de lactancia por su ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function deleteLactancia(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->delete("/lactancia/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->delete("/lactancia/{$id}");
     }
 }

@@ -6,57 +6,96 @@ use App\Services\Contracts\PalpacionServiceInterface;
 
 class ApiPalpacionService extends BaseApiService implements PalpacionServiceInterface
 {
-    private function authHeaders(): array
+    /**
+     * Obtiene la lista de palpaciones con filtros opcionales.
+     *
+     * @param int|null $animalId
+     * @param string|null $tipo
+     * @param string|null $fechaInicio
+     * @param string|null $fechaFin
+     * @param int|null $fincaId
+     * @param int|null $rebanoId
+     * @return array
+     */
+    public function getList(?int $animalId = null, ?string $tipo = null, ?string $fechaInicio = null, ?string $fechaFin = null, ?int $fincaId = null, ?int $rebanoId = null): array
     {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
+        $params = [
+            'animal_id'    => $animalId,
+            'tipo'         => $tipo,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+            'finca_id'     => $fincaId,
+            'rebano_id'    => $rebanoId,
         ];
+
+        return $this->get('/palpacion' . $this->buildQuery($params, true));
     }
 
-    public function getList(?int $animalId = null, ?string $tipo = null, ?string $fechaInicio = null, ?string $fechaFin = null): array
-    {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        $params = array_filter(['animal_id' => $animalId, 'tipo' => $tipo, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin]);
-        $endpoint = '/palpacion' . (!empty($params) ? '?' . http_build_query($params) : '');
-        return $this->get($endpoint, $this->authHeaders());
-    }
-
+    /**
+     * Obtiene el detalle de una palpación por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        return $this->get("/palpacion/{$id}", $this->authHeaders());
+        return $this->get("/palpacion/{$id}");
     }
 
+    /**
+     * Registra una nueva palpación.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->post('/palpacion', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post('/palpacion', $data);
     }
 
+    /**
+     * Actualiza una palpación existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->put("/palpacion/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("/palpacion/{$id}", $data);
     }
 
+    /**
+     * Elimina una palpación por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function eliminar(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->delete("/palpacion/{$id}", $this->authHeaders());
+        return $this->delete("/palpacion/{$id}");
     }
 
-    public function getAnimales(): array
+    /**
+     * Obtiene el listado de animales para selectores.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getAnimales(array $filters = []): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/animales', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/animales' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 
+    /**
+     * Obtiene el listado de personal para selectores.
+     *
+     * @return array
+     */
     public function getPersonalFinca(): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/personal-finca', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/personal-finca' . $this->buildQuery([], true));
+        return $this->extractCollection($response);
     }
 }

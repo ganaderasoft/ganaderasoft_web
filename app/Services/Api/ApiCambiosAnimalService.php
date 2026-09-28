@@ -3,330 +3,168 @@
 namespace App\Services\Api;
 
 use App\Services\Contracts\CambiosAnimalServiceInterface;
-use Exception;
 
+/**
+ * Servicio encargado de gestionar los cambios de etapa y desarrollo de animales.
+ */
 class ApiCambiosAnimalService extends BaseApiService implements CambiosAnimalServiceInterface
 {
     /**
-     * Obtiene la lista de cambios de animales con filtros opcionales
-     * 
-     * @param int|null $idAnimal Filtro por animal
-     * @param int|null $idFinca Filtro por finca
-     * @return array Lista de cambios de animales
+     * Obtiene el listado de registros de cambios de etapa de animales con filtros opcionales.
+     *
+     * @param int|null $idAnimal ID del animal para filtrar.
+     * @param int|null $idFinca ID de la finca para filtrar.
+     * @param bool $nopaginate
+     * @return array
      */
-    public function getList(?int $idAnimal = null, ?int $idFinca = null): array
+    public function getList(?int $idAnimal = null, ?int $idFinca = null, bool $nopaginate = true): array
     {
-        try {
-            \Log::info('ApiCambiosAnimalService@getList - Iniciando obtención de cambios', ['animal_id' => $idAnimal, 'finca_id' => $idFinca]);
-            
-            $user = session('user');
-            
-            if (!$user || !isset($user['token'])) {
-                \Log::warning('ApiCambiosAnimalService@getList - Usuario no autenticado');
-                return [];
-            }
+        $queryParams = [
+            'animal_id' => $idAnimal,
+            'finca_id'  => $idFinca,
+        ];
 
-            $endpoint = '/cambios-animal';
-            $params = [];
-            
-            // Solo filtrar por animal_id según la lógica de la API
-            if ($idAnimal) {
-                $params['animal_id'] = $idAnimal;
-            }
-            
-            if (!empty($params)) {
-                $endpoint .= '?' . http_build_query($params);
-            }
-            
-            \Log::info('ApiCambiosAnimalService@getList - Endpoint construido', ['endpoint' => $endpoint]);
-
-            $response = $this->get($endpoint, [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-            ]);
-            
-            \Log::info('ApiCambiosAnimalService@getList - Respuesta recibida', ['response_structure' => [
-                'success' => $response['success'] ?? null,
-                'data_type' => gettype($response['data'] ?? null),
-                'data_count' => is_array($response['data'] ?? null) ? count($response['data']) : 0
-            ]]);
-            
-            if (isset($response['success']) && $response['success']) {
-                // Para cambios-animal, los datos vienen directamente en 'data', no en 'data.data'
-                $cambios = $response['data'] ?? [];
-                \Log::info('ApiCambiosAnimalService@getList - Cambios encontrados: ' . count($cambios));
-                return $cambios;
-            }
-            
-            \Log::warning('ApiCambiosAnimalService@getList - Respuesta no exitosa', ['response' => $response]);
-            return [];
-        } catch (Exception $e) {
-            \Log::error('Error obteniendo cambios de animales: ' . $e->getMessage());
-            \Log::error('Stack trace cambios: ' . $e->getTraceAsString());
-            return [];
-        }
+        $response = $this->get('/cambios-animal' . $this->buildQuery($queryParams, $nopaginate));
+        return $this->extractCollection($response);
     }
 
     /**
-     * Crea un nuevo registro de cambio de animal
-     * 
-     * @param array $data Datos del cambio
-     * @return array Respuesta de la API
+     * Registra un nuevo cambio de etapa de animal.
+     *
+     * @param array $data
+     * @return array
      */
     public function create(array $data): array
     {
-        try {
-            $user = session('user');
-            
-            if (!$user || !isset($user['token'])) {
-                return [
-                    'success' => false,
-                    'message' => 'Usuario no autenticado'
-                ];
+        // Resolver animal_etapa_id si no fue provisto pero se dispone de animal_id
+        if (empty($data['animal_etapa_id']) && !empty($data['animal_id'])) {
+            $animal = $this->getAnimalById((int) $data['animal_id']);
+            $animalEtapaId = data_get($animal, 'etapa_actual.id');
+            if ($animalEtapaId) {
+                $data['animal_etapa_id'] = $animalEtapaId;
             }
-
-            $response = $this->post('/cambios-animal', $data, [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-                'Content-Type' => 'application/json'
-            ]);
-            
-            return $response;
-        } catch (Exception $e) {
-            \Log::error('Error creando cambio de animal: ' . $e->getMessage());
-            return [
-                'success' => false,
-                'message' => 'Error interno del servidor: ' . $e->getMessage()
-            ];
         }
+
+        return $this->post('/cambios-animal', $data);
     }
 
     /**
-     * Obtiene los detalles de un cambio específico
-     * 
-     * @param int $id ID del cambio
-     * @return array Detalles del cambio
+     * Obtiene el detalle de un registro específico de cambio por su ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function getById(int $id): array
     {
-        try {
-            $user = session('user');
-            
-            if (!$user || !isset($user['token'])) {
-                return [];
-            }
-
-            $response = $this->get("/cambios-animal/{$id}", [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-            ]);
-            
-            if (isset($response['success']) && $response['success']) {
-                return $response['data'] ?? [];
-            }
-            
-            return [];
-        } catch (Exception $e) {
-            \Log::error('Error obteniendo cambio de animal: ' . $e->getMessage());
-            return [];
-        }
+        return $this->get("/cambios-animal/{$id}");
     }
 
     /**
-     * Obtiene la lista de animales para selects
-     * 
-     * @return array Lista de animales
+     * Obtiene el listado de animales para los selectores.
+     *
+     * @param array $filters
+     * @return array
      */
-    public function getAnimales(): array
+    public function getAnimales(array $filters = []): array
     {
-        try {
-            \Log::info('ApiCambiosAnimalService@getAnimales - Iniciando obtención de animales');
-            
-            $user = session('user');
-
-            if (!$user || !isset($user['token'])) {
-                \Log::warning('ApiCambiosAnimalService@getAnimales - Usuario no autenticado o token no encontrado');
-                return [];
-            }
-
-            $response = $this->get('/animales', [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-            ]);
-            
-            if (isset($response['success']) && $response['success']) {
-                // Los datos vienen en formato paginado: response.data.data[]
-                $paginatedData = $response['data'] ?? [];
-                $actualData = $paginatedData['data'] ?? [];
-                \Log::info('ApiCambiosAnimalService@getAnimales - Animales encontrados: ' . count($actualData));
-                return $actualData;
-            }
-            
-            \Log::warning('ApiCambiosAnimalService@getAnimales - Respuesta no exitosa', ['response' => $response]);
-            return [];
-        } catch (Exception $e) {
-            \Log::error('Error obteniendo animales: ' . $e->getMessage());
-            \Log::error('Stack trace animales: ' . $e->getTraceAsString());
-            return [];
-        }
+        $response = $this->get('/animales' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 
     /**
-     * Obtiene la lista de fincas para filtros
-     * 
-     * @return array Lista de fincas
+     * Obtiene el catálogo de fincas para filtrado.
+     *
+     * @param array $filters
+     * @return array
      */
-    public function getFincas(): array
+    public function getFincas(array $filters = []): array
     {
-        try {
-            \Log::info('ApiCambiosAnimalService@getFincas - Iniciando obtención de fincas');
-            
-            $user = session('user');
-
-            if (!$user || !isset($user['token'])) {
-                \Log::warning('ApiCambiosAnimalService@getFincas - Usuario no autenticado o token no encontrado');
-                return [];
-            }
-
-            $response = $this->get('/fincas', [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-            ]);
-            
-            if (isset($response['success']) && $response['success']) {
-                // Los datos vienen en formato paginado: response.data.data[]
-                $paginatedData = $response['data'] ?? [];
-                $actualData = $paginatedData['data'] ?? [];
-                \Log::info('ApiCambiosAnimalService@getFincas - Fincas encontradas: ' . count($actualData));
-                return $actualData;
-            }
-            
-            \Log::warning('ApiCambiosAnimalService@getFincas - Respuesta no exitosa', ['response' => $response]);
-            return [];
-        } catch (Exception $e) {
-            \Log::error('Error obteniendo fincas: ' . $e->getMessage());
-            \Log::error('Stack trace fincas: ' . $e->getTraceAsString());
-            return [];
-        }
-    }
-
-    public function getRebanos(): array
-    {
-        try {
-            $user = session('user');
-            if (!$user || !isset($user['token'])) return [];
-            $response = $this->get('/rebanos', [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-            ]);
-            if (isset($response['success']) && $response['success']) {
-                $paginatedData = $response['data'] ?? [];
-                return $paginatedData['data'] ?? [];
-            }
-            return [];
-        } catch (Exception $e) {
-            \Log::error('Error obteniendo rebanios: ' . $e->getMessage());
-            return [];
-        }
+        $response = $this->get('/fincas' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 
     /**
-     * Obtiene estadísticas de cambios 
-     * 
-     * @return array Estadísticas agregadas
+     * Obtiene el catálogo de rebaños para filtrado.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getRebanos(array $filters = []): array
+    {
+        $response = $this->get('/rebanos' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
+    }
+
+    /**
+     * Calcula métricas y estadísticas agregadas a partir de la lista de cambios.
+     *
+     * @return array
      */
     public function getEstadisticas(): array
     {
-        try {
-            $cambios = $this->getList();
-            
-            $estadisticas = [
-                'total_cambios' => count($cambios),
-                'por_etapa' => [],
-                'ultimos_30_dias' => 0,
-                'promedio_peso' => 0,
-                'promedio_altura' => 0
-            ];
-            
-            if (empty($cambios)) {
-                return $estadisticas;
-            }
-            
-            // Agrupar por etapa
-            $porEtapa = [];
-            $pesos = [];
-            $alturas = [];
-            $fechaLimite = date('Y-m-d', strtotime('-30 days'));
-            $recientes = 0;
-            
-            foreach ($cambios as $cambio) {
-                $etapa = $cambio['Etapa_Cambio'];
-                $porEtapa[$etapa] = ($porEtapa[$etapa] ?? 0) + 1;
-                
-                if ($cambio['Peso']) {
-                    $pesos[] = $cambio['Peso'];
-                }
-                if ($cambio['Altura']) {
-                    $alturas[] = $cambio['Altura'];
-                }
-                
-                if ($cambio['Fecha_Cambio'] >= $fechaLimite) {
-                    $recientes++;
-                }
-            }
-            
-            $estadisticas['por_etapa'] = $porEtapa;
-            $estadisticas['ultimos_30_dias'] = $recientes;
-            $estadisticas['promedio_peso'] = !empty($pesos) ? round(array_sum($pesos) / count($pesos), 1) : 0;
-            $estadisticas['promedio_altura'] = !empty($alturas) ? round(array_sum($alturas) / count($alturas), 1) : 0;
-            
+        $cambios = $this->getList();
+
+        $estadisticas = [
+            'total_cambios'   => count($cambios),
+            'por_etapa'       => [],
+            'ultimos_30_dias' => 0,
+            'promedio_peso'   => 0.0,
+            'promedio_altura' => 0.0,
+        ];
+
+        if (empty($cambios)) {
             return $estadisticas;
-        } catch (Exception $e) {
-            \Log::error('Error calculando estadísticas de cambios: ' . $e->getMessage());
-            return [
-                'total_cambios' => 0,
-                'por_etapa' => [],
-                'ultimos_30_dias' => 0,
-                'promedio_peso' => 0,
-                'promedio_altura' => 0
-            ];
         }
+
+        $porEtapa = [];
+        $pesos = [];
+        $alturas = [];
+        $fechaLimite = date('Y-m-d', strtotime('-30 days'));
+        $recientes = 0;
+
+        foreach ($cambios as $cambio) {
+            if (!is_array($cambio)) {
+                continue;
+            }
+
+            $etapa = $cambio['etapa_cambio'] ?? null;
+            if ($etapa) {
+                $porEtapa[$etapa] = ($porEtapa[$etapa] ?? 0) + 1;
+            }
+
+            if (isset($cambio['peso']) && is_numeric($cambio['peso']) && (float) $cambio['peso'] > 0) {
+                $pesos[] = (float) $cambio['peso'];
+            }
+
+            if (isset($cambio['altura']) && is_numeric($cambio['altura']) && (float) $cambio['altura'] > 0) {
+                $alturas[] = (float) $cambio['altura'];
+            }
+
+            $fecha = $cambio['fecha_cambio'] ?? null;
+            if ($fecha && $fecha >= $fechaLimite) {
+                $recientes++;
+            }
+        }
+
+        $estadisticas['por_etapa']       = $porEtapa;
+        $estadisticas['ultimos_30_dias'] = $recientes;
+        $estadisticas['promedio_peso']   = !empty($pesos) ? round(array_sum($pesos) / count($pesos), 1) : 0.0;
+        $estadisticas['promedio_altura'] = !empty($alturas) ? round(array_sum($alturas) / count($alturas), 1) : 0.0;
+
+        return $estadisticas;
     }
 
     /**
-     * Obtiene los detalles de un animal específico incluyendo su etapa actual
+     * Obtiene la información detallada de un animal por su ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function getAnimalById(int $id): array
     {
-        try {
-            \Log::info('ApiCambiosAnimalService@getAnimalById - Obteniendo animal: ' . $id);
-            
-            $user = session('user');
-
-            if (!$user || !isset($user['token'])) {
-                \Log::warning('ApiCambiosAnimalService@getAnimalById - Usuario no autenticado');
-                return [];
-            }
-
-            $response = $this->get("/animales/{$id}", [
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . $user['token'],
-            ]);
-            
-            \Log::info('ApiCambiosAnimalService@getAnimalById - Response obtenido', [
-                'animal_id' => $id,
-                'has_data' => isset($response['data']),
-                'has_etapa_actual' => isset($response['data']['etapa_actual'])
-            ]);
-            
-            if (isset($response['success']) && $response['success'] && isset($response['data'])) {
-                return $response['data'];
-            }
-            
-            return [];
-        } catch (Exception $e) {
-            \Log::error('Error obteniendo animal por ID: ' . $e->getMessage(), ['animal_id' => $id]);
-            return [];
-        }
+        $response = $this->get("/animales/{$id}");
+        return ($response['success'] ?? false) && is_array($response['data'] ?? null)
+            ? $response['data']
+            : [];
     }
 }

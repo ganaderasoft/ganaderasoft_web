@@ -1,9 +1,6 @@
 <?php
 
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\FincasController;
-use App\Http\Controllers\RebanosController;
-use App\Http\Controllers\PersonalController;
+use App\Http\Controllers\PesoCorporalController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -17,18 +14,8 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-// Auth API routes
-Route::post('/login', [AuthController::class, 'apiLogin'])->name('api.login');
-Route::post('/logout', [AuthController::class, 'apiLogout'])->middleware('mock.auth')->name('api.logout');
-
 // Protected API routes
 Route::middleware(['mock.auth'])->group(function () {
-    // Fincas API
-    Route::get('/fincas', [FincasController::class, 'apiFincas'])->name('api.fincas');
-    
-    // Rebaños API
-    Route::get('/rebanos', [RebanosController::class, 'apiRebanos'])->name('api.rebanos');
-    
-    // Personal API
-    Route::get('/personal', [PersonalController::class, 'apiPersonal'])->name('api.personal');
+    // Peso Corporal API
+    Route::get('/peso-corporal/animal/{id}/etapa', [PesoCorporalController::class, 'getAnimalEtapa'])->name('api.peso-corporal.animal.etapa');
 });

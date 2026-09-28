@@ -18,31 +18,47 @@ class RebanosController extends Controller
      */
     public function index(Request $request)
     {
-        $idFinca = $request->query('id_finca');
-        $nombre  = $request->query('nombre', '');
+        $fincaId   = $request->query('finca_id') ?? $request->query('id_finca');
+        $nombre    = $request->query('nombre', '');
+        
+        $incluirArchivados = $request->boolean('incluir_archivados');
+        $hasArchivado      = $request->has('archivado');
+        $archivado         = $hasArchivado ? $request->boolean('archivado') : null;
 
-        $response = $this->rebanosService->getRebanos();
-        $allRebanos = ($response['success'] ?? false) ? ($response['data']['data'] ?? []) : [];
+        // Cargar todos los rebaños (activos y archivados) para permitir filtrado reactivo e instantáneo en la vista
+        $response = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        
+        $allRebanos = [];
+        if (isset($response['success']) && $response['success']) {
+            $allRebanos = $response['data']['data'] ?? $response['data'] ?? [];
+        }
 
         // Cargar fincas para el filtro
-        $fincasResponse = $this->fincasService->getFincas();
+        $fincasResponse = $this->fincasService->getFincas(['incluir_archivados' => true]);
         $fincas = ($fincasResponse['success'] ?? false) ? ($fincasResponse['data']['data'] ?? $fincasResponse['data'] ?? []) : [];
 
-        // Filtrar por finca y nombre
-        $rebanos = array_values(array_filter($allRebanos, function ($rebano) use ($idFinca, $nombre) {
-            if ($idFinca && ($rebano['id_Finca'] ?? null) != $idFinca) return false;
-            if ($nombre && stripos($rebano['Nombre'] ?? '', $nombre) === false) return false;
-            return true;
-        }));
+        // Si no se pasó explícitamente el parámetro 'archivado', inferirlo según la finca consultada
+        if (!$incluirArchivados && $archivado === null) {
+            if ($fincaId) {
+                $fincaObj = collect($fincas)->firstWhere('id', (int)$fincaId);
+                $archivado = (!empty($fincaObj['archivado'])) ? true : false;
+            } else {
+                $archivado = false;
+            }
+        }
 
-        // Stats
-        $totalAnimales = array_sum(array_map(fn($r) => count($r['animales'] ?? []), $rebanos));
+        // Pasar todos los rebaños a la vista para permitir filtrado reactivo en vivo sin recargas
+        $rebanos = $allRebanos;
+
+        // Stats globales iniciales
+        $totalAnimales = array_sum(array_map(fn($r) => (int)($r['total_animales'] ?? count($r['animales'] ?? [])), $rebanos));
         $estadisticas = [
             'total'          => count($rebanos),
             'totalAnimales'  => $totalAnimales,
         ];
 
-        return view('rebanos.index', compact('rebanos', 'fincas', 'idFinca', 'nombre', 'estadisticas'));
+        $idFinca = $fincaId;
+        return view('rebanos.index', compact('rebanos', 'fincas', 'fincaId', 'idFinca', 'nombre', 'archivado', 'incluirArchivados', 'estadisticas'));
     }
 
     /**
@@ -50,35 +66,35 @@ class RebanosController extends Controller
      */
     public function create()
     {
-        $selectedFinca = session('selected_finca');
-        
-        if (!$selectedFinca) {
-            return redirect()->route('fincas.index')->with('error', 'Debe seleccionar una finca primero');
-        }
+        $fincasResponse = $this->fincasService->getFincas();
+        $fincas = ($fincasResponse['success'] ?? false) ? ($fincasResponse['data']['data'] ?? $fincasResponse['data'] ?? []) : [];
 
-        return view('rebanos.create', compact('selectedFinca'));
+        return view('rebanos.create', compact('fincas'));
     }
 
     /**
-     * Store a new rebaño
+     * Store a new rebaño (API V2 payload format)
      */
     public function store(Request $request)
     {
-        $selectedFinca = session('selected_finca');
-        
-        if (!$selectedFinca) {
-            return redirect()->route('fincas.index')->with('error', 'Debe seleccionar una finca primero');
-        }
+        $request->validate([
+            'nombre' => 'required|string|max:100',
+            'finca_id' => 'required|integer',
+        ], [
+            'nombre.required' => 'El nombre del rebaño es obligatorio',
+            'finca_id.required' => 'Debe seleccionar una finca para el rebaño',
+        ]);
 
         $data = [
-            'id_Finca' => $selectedFinca['id_Finca'],
-            'Nombre' => $request->input('Nombre'),
+            'finca_id' => (int)$request->input('finca_id'),
+            'nombre' => (string)$request->input('nombre'),
         ];
 
         $response = $this->rebanosService->createRebano($data);
 
         if (isset($response['success']) && $response['success']) {
-            return redirect()->route('rebanos.index')->with('success', 'Rebaño creado exitosamente');
+            return redirect()->route('rebanos.index', ['finca_id' => $data['finca_id']])
+                ->with('success', 'Rebaño creado exitosamente');
         }
 
         return redirect()->back()
@@ -91,41 +107,47 @@ class RebanosController extends Controller
      */
     public function edit($id)
     {
-        $selectedFinca = session('selected_finca');
-        
-        if (!$selectedFinca) {
-            return redirect()->route('fincas.index')->with('error', 'Debe seleccionar una finca primero');
+        // 1. Intentar obtener el rebaño directamente por su ID
+        $response = $this->rebanosService->getRebano((int)$id);
+
+        if (isset($response['success']) && $response['success'] && !empty($response['data'])) {
+            $rebano = $response['data'];
+            return view('rebanos.edit', compact('rebano'));
         }
 
-        // Get all rebanos and find the one we need
-        $response = $this->rebanosService->getRebanos();
+        // 2. Fallback: buscar en la lista completa incluyendo archivados
+        $listResponse = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
 
-        if (isset($response['success']) && $response['success']) {
-            $allRebanos = $response['data']['data'] ?? [];
+        if (isset($listResponse['success']) && $listResponse['success']) {
+            $allRebanos = $listResponse['data']['data'] ?? $listResponse['data'] ?? [];
             
-            // Find the rebano by ID
-            $rebano = collect($allRebanos)->firstWhere('id_Rebano', (int)$id);
+            // Find the rebano by ID (V2 id or legacy)
+            $rebano = collect($allRebanos)->first(function ($r) use ($id) {
+                return ($r['id'] ?? null) == $id || ($r['id_Rebano'] ?? null) == $id || ($r['Rebano_ID'] ?? null) == $id;
+            });
 
             if ($rebano) {
-                return view('rebanos.edit', compact('rebano', 'selectedFinca'));
+                return view('rebanos.edit', compact('rebano'));
             }
-
-            return redirect()->route('rebanos.index')->with('error', 'Rebaño no encontrado');
         }
 
-        return redirect()->route('rebanos.index')->with('error', $response['message'] ?? 'Error al obtener el rebaño');
+        return redirect()->route('rebanos.index')->with('error', $response['message'] ?? 'Rebaño no encontrado');
     }
 
     /**
-     * Update an existing rebaño
+     * Update an existing rebaño (API V2 payload format)
      */
     public function update(Request $request, $id)
     {
+        $request->validate([
+            'nombre' => 'required|string|max:100',
+        ]);
+
         $data = [
-            'Nombre' => $request->input('Nombre'),
+            'nombre' => (string)$request->input('nombre'),
         ];
 
-        $response = $this->rebanosService->updateRebano($id, $data);
+        $response = $this->rebanosService->updateRebano((int)$id, $data);
 
         if (isset($response['success']) && $response['success']) {
             return redirect()->route('rebanos.index')->with('success', 'Rebaño actualizado exitosamente');
@@ -152,4 +174,47 @@ class RebanosController extends Controller
             'message' => $response['message'] ?? 'Error al obtener los rebaños'
         ], 500);
     }
+
+    /**
+     * Archiva un rebaño activo.
+     */
+    public function archive($id)
+    {
+        $response = $this->rebanosService->archiveRebano((int)$id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->back()->with('success', $response['message'] ?? 'Rebaño archivado exitosamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al archivar el rebaño.');
+    }
+
+    /**
+     * Desarchiva un rebaño archivado.
+     */
+    public function unarchive($id)
+    {
+        $response = $this->rebanosService->unarchiveRebano((int)$id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->back()->with('success', $response['message'] ?? 'Rebaño desarchivado exitosamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al desarchivar el rebaño.');
+    }
+
+    /**
+     * Elimina definitivamente un rebaño y sus dependencias en cascada.
+     */
+    public function destroy($id)
+    {
+        $response = $this->rebanosService->deleteRebano((int)$id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->route('rebanos.index')->with('success', $response['message'] ?? 'Rebaño eliminado definitivamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al eliminar el rebaño.');
+    }
 }
+
