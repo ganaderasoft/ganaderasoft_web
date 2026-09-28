@@ -7,125 +7,91 @@ use App\Services\Contracts\PersonalFincaServiceInterface;
 class ApiPersonalFincaService extends BaseApiService implements PersonalFincaServiceInterface
 {
     /**
-     * Get list of personal de finca
+     * Obtiene el listado de personal de finca con filtro opcional por finca.
+     *
+     * @param int|null $fincaId
+     * @return array
      */
-    public function getPersonalFinca(?int $fincaId = null): array
+    public function getPersonalFinca(array|int|null $filters = null): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $endpoint = '/personal-finca';
-        $params = [];
-        
-        if ($fincaId) {
-            $params['id_finca'] = $fincaId;
-        }
-
-        if (!empty($params)) {
-            $endpoint .= '?' . http_build_query($params);
-        }
-
-        $response = $this->get($endpoint, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        $params = is_array($filters) ? $filters : (is_numeric($filters) ? ['finca_id' => (int)$filters] : []);
+        return $this->get('/personal-finca' . $this->buildQuery($params, true));
     }
 
     /**
-     * Get a single personal de finca record by ID
+     * Obtiene un registro individual de personal de finca por ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function getPersonalFincaById(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get("/personal-finca/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get("/personal-finca/{$id}");
     }
 
     /**
-     * Create a new personal de finca record
+     * Asigna un nuevo trabajador a una finca.
+     *
+     * @param array $data
+     * @return array
      */
     public function createPersonalFinca(array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->post('/personal-finca', $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->post('/personal-finca', $data);
     }
 
     /**
-     * Update an existing personal de finca record
+     * Actualiza la asignación de personal de finca.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
      */
     public function updatePersonalFinca(int $id, array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->put("/personal-finca/{$id}", $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->put("/personal-finca/{$id}", $data);
     }
 
     /**
-     * Delete a personal de finca record
+     * Elimina una asignación de personal de finca.
+     *
+     * @param int $id
+     * @return array
      */
     public function deletePersonalFinca(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
+        return $this->delete("/personal-finca/{$id}");
+    }
 
-        $response = $this->delete("/personal-finca/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
+    /**
+     * Enable personal de finca (status = true).
+     *
+     * @param int $id
+     * @return array
+     */
+    public function enable(int $id): array
+    {
+        return $this->patch("/personal-finca/{$id}/enable");
+    }
 
-        return $response;
+    /**
+     * Disable personal de finca (status = false).
+     *
+     * @param int $id
+     * @return array
+     */
+    public function disable(int $id): array
+    {
+        return $this->patch("/personal-finca/{$id}/disable");
+    }
+
+    /**
+     * Obtiene el catálogo de tipos de trabajador.
+     *
+     * @return array
+     */
+    public function getTiposTrabajador(): array
+    {
+        return $this->get('/tipos-trabajador' . $this->buildQuery([], true));
     }
 }

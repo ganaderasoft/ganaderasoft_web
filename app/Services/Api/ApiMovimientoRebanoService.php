@@ -4,66 +4,113 @@ namespace App\Services\Api;
 
 use App\Services\Contracts\MovimientoRebanoServiceInterface;
 
+/**
+ * Servicio encargado de la gestión de movimientos de rebaño.
+ */
 class ApiMovimientoRebanoService extends BaseApiService implements MovimientoRebanoServiceInterface
 {
-    private function authHeaders(): array
+    /**
+     * Obtiene la lista de movimientos de rebaño.
+     *
+     * @param int|null $fincaId
+     * @param int|null $rebanoId
+     * @param bool $nopaginate
+     * @return array
+     */
+    public function getList(?int $fincaId = null, ?int $rebanoId = null, bool $nopaginate = true): array
     {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
+        $params = [
+            'finca_id'  => $fincaId,
+            'rebano_id' => $rebanoId,
         ];
+
+        $response = $this->get('/movimiento-rebano' . $this->buildQuery($params, $nopaginate));
+
+        if (!($response['success'] ?? false)) {
+            return ['success' => false, 'data' => [], 'message' => $response['message'] ?? 'Error al consultar movimientos'];
+        }
+
+        return ['success' => true, 'data' => $this->extractCollection($response)];
     }
 
-    public function getList(?int $fincaId = null, ?int $rebanoId = null): array
-    {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        $params = array_filter(['id_finca' => $fincaId, 'id_rebano' => $rebanoId]);
-        $endpoint = '/movimiento-rebano' . (!empty($params) ? '?' . http_build_query($params) : '');
-        return $this->get($endpoint, $this->authHeaders());
-    }
-
+    /**
+     * Obtiene un movimiento de rebaño por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        return $this->get("/movimiento-rebano/{$id}", $this->authHeaders());
+        return $this->get("/movimiento-rebano/{$id}");
     }
 
+    /**
+     * Registra un nuevo movimiento de rebaño.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->post('/movimiento-rebano', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post('/movimiento-rebano', $data);
     }
 
+    /**
+     * Actualiza un movimiento de rebaño existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->put("/movimiento-rebano/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("/movimiento-rebano/{$id}", $data);
     }
 
+    /**
+     * Elimina un movimiento de rebaño por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function eliminar(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->delete("/movimiento-rebano/{$id}", $this->authHeaders());
+        return $this->delete("/movimiento-rebano/{$id}");
     }
 
-    public function getFincas(): array
+    /**
+     * Obtiene la lista completa de fincas para selectores.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getFincas(array $filters = []): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/fincas', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/fincas' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 
-    public function getRebanos(): array
+    /**
+     * Obtiene la lista completa de rebaños para selectores.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getRebanos(array $filters = []): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/rebanos', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/rebanos' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 
-    public function getAnimales(): array
+    /**
+     * Obtiene la lista completa de animales para selectores.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getAnimales(array $filters = []): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/animales', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/animales' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 }

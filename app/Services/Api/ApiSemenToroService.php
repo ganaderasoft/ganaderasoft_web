@@ -6,50 +6,82 @@ use App\Services\Contracts\SemenToroServiceInterface;
 
 class ApiSemenToroService extends BaseApiService implements SemenToroServiceInterface
 {
-    private function authHeaders(): array
+    /**
+     * Obtiene el listado de registros de semen de toro.
+     *
+     * @param int|null $toroId
+     * @param bool|null $activo
+     * @return array
+     */
+    public function getList(?int $toroId = null, ?bool $activo = null, ?string $fechaInicio = null, ?string $fechaFin = null, ?int $fincaId = null, ?int $rebanoId = null): array
     {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
+        $params = [
+            'toro_id'      => $toroId,
+            'activo'       => $activo !== null ? ($activo ? '1' : '0') : null,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+            'finca_id'     => $fincaId,
+            'rebano_id'    => $rebanoId,
         ];
+
+        return $this->get('/semen-toro' . $this->buildQuery($params, true));
     }
 
-    public function getList(?int $toroId = null, ?bool $activo = null): array
-    {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        $params = array_filter(['toro_id' => $toroId, 'activo' => $activo !== null ? ($activo ? '1' : '0') : null]);
-        $endpoint = '/semen-toro' . (!empty($params) ? '?' . http_build_query($params) : '');
-        return $this->get($endpoint, $this->authHeaders());
-    }
-
+    /**
+     * Obtiene el detalle de un registro de semen de toro por ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        return $this->get("/semen-toro/{$id}", $this->authHeaders());
+        return $this->get("/semen-toro/{$id}");
     }
 
+    /**
+     * Registra una nueva muestra o lote de semen de toro.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->post('/semen-toro', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post('/semen-toro', $data);
     }
 
+    /**
+     * Actualiza un registro de semen de toro existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->put("/semen-toro/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("/semen-toro/{$id}", $data);
     }
 
+    /**
+     * Elimina un registro de semen de toro por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function eliminar(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->delete("/semen-toro/{$id}", $this->authHeaders());
+        return $this->delete("/semen-toro/{$id}");
     }
 
-    public function getToros(): array
+    /**
+     * Obtiene el catálogo de toros (machos) para selectores.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getToros(array $filters = []): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/animales?sexo=M', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $params = array_merge(['sexo' => 'M'], $filters);
+        $response = $this->get('/animales' . $this->buildQuery($params, true));
+        return $this->extractCollection($response);
     }
 }

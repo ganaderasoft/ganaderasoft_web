@@ -10,7 +10,7 @@ interface CambiosAnimalServiceInterface
      * @param array $filtros Filtros opcionales para la consulta
      * @return array Lista de cambios de animales
      */
-    public function getList(?int $idAnimal = null, ?int $idFinca = null): array;
+    public function getList(?int $idAnimal = null, ?int $idFinca = null, bool $nopaginate = true): array;
 
     /**
      * Crea un nuevo registro de cambio de animal
@@ -33,16 +33,9 @@ interface CambiosAnimalServiceInterface
      * 
      * @return array Lista de animales
      */
-    public function getAnimales(): array;
-
-    /**
-     * Obtiene la lista de fincas para los filtros
-     * 
-     * @return array Lista de fincas
-     */
-    public function getFincas(): array;
-
-    public function getRebanos(): array;
+    public function getAnimales(array $filters = []): array;
+    public function getFincas(array $filters = []): array;
+    public function getRebanos(array $filters = []): array;
 
     /**
      * Obtiene estadísticas de cambios

@@ -6,71 +6,116 @@ use App\Services\Contracts\ServicioAnimalServiceInterface;
 
 class ApiServicioAnimalService extends BaseApiService implements ServicioAnimalServiceInterface
 {
-    private function authHeaders(): array
+    /**
+     * Obtiene la lista de servicios reproductivos / montas / inseminaciones.
+     *
+     * @param int|null $animalId
+     * @param string|null $tipo
+     * @param string|null $fechaInicio
+     * @param string|null $fechaFin
+     * @return array
+     */
+    public function getList(?int $animalId = null, ?string $tipo = null, ?string $fechaInicio = null, ?string $fechaFin = null, ?int $fincaId = null, ?int $rebanoId = null): array
     {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
+        $params = [
+            'animal_id'    => $animalId,
+            'tipo'         => $tipo,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+            'finca_id'     => $fincaId,
+            'rebano_id'    => $rebanoId,
         ];
+
+        return $this->get('/servicio-animal' . $this->buildQuery($params, true));
     }
 
-    public function getList(?int $animalId = null, ?string $tipo = null, ?string $fechaInicio = null, ?string $fechaFin = null): array
-    {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        $params = array_filter(['animal_id' => $animalId, 'tipo' => $tipo, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin]);
-        $endpoint = '/servicio-animal' . (!empty($params) ? '?' . http_build_query($params) : '');
-        return $this->get($endpoint, $this->authHeaders());
-    }
-
+    /**
+     * Obtiene el detalle de un servicio reproductivo por ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        return $this->get("/servicio-animal/{$id}", $this->authHeaders());
+        return $this->get("/servicio-animal/{$id}");
     }
 
+    /**
+     * Registra un nuevo servicio reproductivo.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->post('/servicio-animal', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post('/servicio-animal', $data);
     }
 
+    /**
+     * Actualiza un servicio reproductivo existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->put("/servicio-animal/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("/servicio-animal/{$id}", $data);
     }
 
+    /**
+     * Elimina un servicio reproductivo por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function eliminar(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->delete("/servicio-animal/{$id}", $this->authHeaders());
+        return $this->delete("/servicio-animal/{$id}");
     }
 
-    public function getAnimales(): array
+    /**
+     * Obtiene el listado de animales para selectores.
+     *
+     * @param array $filters
+     * @return array
+     */
+    public function getAnimales(array $filters = []): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/animales', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/animales' . $this->buildQuery($filters, true));
+        return $this->extractCollection($response);
     }
 
+    /**
+     * Obtiene el catálogo de semen de toros para selectores.
+     *
+     * @return array
+     */
     public function getSemenToros(): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/semen-toro?activo=1', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data'] ?? []) : [];
+        $response = $this->get('/semen-toro' . $this->buildQuery([], true));
+        return $this->extractCollection($response);
     }
 
+    /**
+     * Obtiene el listado de personal para selectores.
+     *
+     * @return array
+     */
     public function getPersonalFinca(): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/personal-finca', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data']['data'] ?? $r['data'] ?? []) : [];
+        $response = $this->get('/personal-finca' . $this->buildQuery([], true));
+        return $this->extractCollection($response);
     }
 
+    /**
+     * Obtiene el listado de registros de celo para selectores.
+     *
+     * @return array
+     */
     public function getRegistrosCelo(): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/registro-celo', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data'] ?? []) : [];
+        $response = $this->get('/registro-celo' . $this->buildQuery([], true));
+        return $this->extractCollection($response);
     }
 }

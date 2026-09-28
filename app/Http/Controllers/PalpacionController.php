@@ -3,11 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Services\Contracts\PalpacionServiceInterface;
+use App\Services\Contracts\FincasServiceInterface;
+use App\Services\Contracts\RebanosServiceInterface;
+use App\Services\Contracts\EtapaServiceInterface;
 use Illuminate\Http\Request;
 
 class PalpacionController extends Controller
 {
-    public function __construct(protected PalpacionServiceInterface $service) {}
+    public function __construct(
+        protected PalpacionServiceInterface $service,
+        protected FincasServiceInterface $fincasService,
+        protected RebanosServiceInterface $rebanosService,
+        protected EtapaServiceInterface $etapaService
+    ) {}
 
     private function isFemale(array $animal): bool
     {
@@ -27,18 +35,23 @@ class PalpacionController extends Controller
 
     private function isVetOrTech(array $persona): bool
     {
-        $tipo = strtolower(trim((string) (data_get($persona, 'Tipo_Trabajador') ?? data_get($persona, 'tipo_trabajador') ?? data_get($persona, 'personal.Tipo_Trabajador') ?? '')));
+        $tipoVal = data_get($persona, 'tipo_trabajador.nombre') ?? data_get($persona, 'tipoTrabajador.nombre') ?? data_get($persona, 'Tipo_Trabajador') ?? data_get($persona, 'tipo_trabajador') ?? '';
+        if (is_array($tipoVal)) {
+            $tipoVal = $tipoVal['nombre'] ?? $tipoVal['Nombre'] ?? '';
+        }
+        $tipo = strtolower(trim((string) $tipoVal));
 
         if ($tipo === '') {
             return true;
         }
 
-        return str_contains($tipo, 'veterinario') || str_contains($tipo, 'tecnico') || str_contains($tipo, 'técnico');
+        return str_contains($tipo, 'veterinario') || str_contains($tipo, 'tecnico') || str_contains($tipo, 'técnico') || str_contains($tipo, 'inseminador') || str_contains($tipo, 'palpador') || str_contains($tipo, 'operario');
     }
 
     private function filterVetTechStaff(array $personal): array
     {
-        return array_values(array_filter($personal, fn (array $persona) => $this->isVetOrTech($persona)));
+        $filtered = array_values(array_filter($personal, fn (array $persona) => $this->isVetOrTech($persona)));
+        return !empty($filtered) ? $filtered : $personal;
     }
 
     private function apiMessage(array $response, string $fallback): string
@@ -60,38 +73,85 @@ class PalpacionController extends Controller
     public function index(Request $request)
     {
         $animalId    = $request->query('animal_id');
+        $fincaId     = $request->query('finca_id');
+        $rebanoId    = $request->query('rebano_id');
         $tipo        = $request->query('tipo');
         $fechaInicio = $request->query('fecha_inicio');
         $fechaFin    = $request->query('fecha_fin');
 
-        $response   = $this->service->getList($animalId, $tipo, $fechaInicio, $fechaFin);
-        $palpaciones = ($response['success'] ?? false) ? ($response['data'] ?? []) : [];
-        $animales   = $this->filterFemaleAnimals($this->service->getAnimales());
+        $response    = $this->service->getList();
+        $data        = ($response['success'] ?? false) ? ($response['data'] ?? []) : [];
+        $palpaciones = (isset($data['data']) && is_array($data['data']) && !isset($data['id'])) ? $data['data'] : $data;
+        $animales    = $this->filterFemaleAnimals($this->service->getAnimales(['incluir_archivados' => true]));
 
-        return view('palpacion.index', compact('palpaciones', 'animales', 'animalId', 'tipo', 'fechaInicio', 'fechaFin'));
+        $fincasRes   = $this->fincasService->getFincas(['incluir_archivados' => true]);
+        $fincas      = ($fincasRes['success'] ?? false) ? ($fincasRes['data']['data'] ?? $fincasRes['data'] ?? []) : [];
+
+        $rebanosRes  = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        $rebanos     = ($rebanosRes['success'] ?? false) ? ($rebanosRes['data']['data'] ?? $rebanosRes['data'] ?? []) : [];
+
+        if ($animalId) {
+            $an = collect($animales)->firstWhere('id', (int) $animalId);
+            if ($an) {
+                $rebanoId = $rebanoId ?: (data_get($an, 'rebano_id') ?? data_get($an, 'rebano.id'));
+                $fincaId  = $fincaId ?: (data_get($an, 'rebano.finca_id') ?? data_get($an, 'rebano.finca.id'));
+            }
+        } elseif ($rebanoId && !$fincaId) {
+            $rebObj = collect($rebanos)->firstWhere('id', (int) $rebanoId);
+            if ($rebObj) {
+                $fincaId = $rebObj['finca_id'] ?? data_get($rebObj, 'finca.id') ?? null;
+            }
+        }
+
+        $etapasRes   = $this->etapaService->getAll();
+        $etapas      = ($etapasRes['success'] ?? false) ? ($etapasRes['data']['data'] ?? $etapasRes['data'] ?? []) : [];
+
+        return view('palpacion.index', compact(
+            'palpaciones', 'animales', 'fincas', 'rebanos', 'etapas',
+            'animalId', 'fincaId', 'rebanoId', 'tipo', 'fechaInicio', 'fechaFin'
+        ));
     }
 
-    public function create()
+    public function create(Request $request)
     {
         $animales = $this->filterFemaleAnimals($this->service->getAnimales());
         $personal = $this->filterVetTechStaff($this->service->getPersonalFinca());
-        return view('palpacion.create', compact('animales', 'personal'));
+
+        $fincasRes  = $this->fincasService->getFincas();
+        $fincas     = ($fincasRes['success'] ?? false) ? ($fincasRes['data']['data'] ?? $fincasRes['data'] ?? []) : [];
+
+        $rebanosRes = $this->rebanosService->getRebanos();
+        $rebanos    = ($rebanosRes['success'] ?? false) ? ($rebanosRes['data']['data'] ?? $rebanosRes['data'] ?? []) : [];
+
+        $etapasRes  = $this->etapaService->getAll();
+        $etapas     = ($etapasRes['success'] ?? false) ? ($etapasRes['data']['data'] ?? $etapasRes['data'] ?? []) : [];
+
+        $presetAnimalId = $request->query('animal_id');
+
+        return view('palpacion.create', compact('animales', 'personal', 'fincas', 'rebanos', 'etapas', 'presetAnimalId'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'palpacion_fecha'      => 'nullable|date',
-            'palpacion_tipo'       => 'nullable|string|max:11',
-            'palpacion_etapa_anid' => 'required|integer',
-            'palpacion_etapa_etid' => 'required|integer',
+            'fecha'     => 'required|date',
+            'tipo'      => 'nullable|string|max:25',
+            'animal_id' => 'required|integer',
+            'etapa_id'  => 'required|integer',
+            'tecnico_id'=> 'nullable|integer',
         ], [
-            'palpacion_etapa_anid.required' => 'El animal es requerido.',
-            'palpacion_etapa_etid.required' => 'La etapa del animal es requerida.',
+            'fecha.required'     => 'La fecha de la palpación es requerida.',
+            'animal_id.required' => 'El animal es requerido.',
+            'etapa_id.required'  => 'La etapa del animal es requerida.',
         ]);
 
-        $data = $request->only(['id_Tecnico', 'palpacion_tipo', 'palpacion_fecha', 'palpacion_etapa_anid', 'palpacion_etapa_etid']);
-        if (isset($data['id_Tecnico']) && $data['id_Tecnico'] === '') $data['id_Tecnico'] = null;
+        $data = [
+            'personal_finca_id' => $request->filled('tecnico_id') ? (int)$request->input('tecnico_id') : null,
+            'tipo'              => $request->input('tipo'),
+            'fecha'             => $request->input('fecha'),
+            'animal_id'         => (int)$request->input('animal_id'),
+            'etapa_id'          => (int)$request->input('etapa_id'),
+        ];
 
         $response = $this->service->create($data);
 
@@ -108,7 +168,11 @@ class PalpacionController extends Controller
             return redirect()->route('palpacion.index')->with('error', 'Registro no encontrado.');
         }
         $palpacion = $response['data'];
-        return view('palpacion.show', compact('palpacion'));
+
+        $etapasRes  = $this->etapaService->getAll();
+        $etapas     = ($etapasRes['success'] ?? false) ? ($etapasRes['data']['data'] ?? $etapasRes['data'] ?? []) : [];
+
+        return view('palpacion.show', compact('palpacion', 'etapas'));
     }
 
     public function edit(int $id)
@@ -120,18 +184,34 @@ class PalpacionController extends Controller
         $palpacion = $response['data'];
         $animales  = $this->filterFemaleAnimals($this->service->getAnimales());
         $personal  = $this->filterVetTechStaff($this->service->getPersonalFinca());
-        return view('palpacion.edit', compact('palpacion', 'animales', 'personal'));
+
+        $fincasRes  = $this->fincasService->getFincas(['incluir_archivados' => true]);
+        $fincas     = ($fincasRes['success'] ?? false) ? ($fincasRes['data']['data'] ?? $fincasRes['data'] ?? []) : [];
+
+        $rebanosRes = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        $rebanos    = ($rebanosRes['success'] ?? false) ? ($rebanosRes['data']['data'] ?? $rebanosRes['data'] ?? []) : [];
+
+        $etapasRes  = $this->etapaService->getAll();
+        $etapas     = ($etapasRes['success'] ?? false) ? ($etapasRes['data']['data'] ?? $etapasRes['data'] ?? []) : [];
+
+        return view('palpacion.edit', compact('palpacion', 'animales', 'personal', 'fincas', 'rebanos', 'etapas'));
     }
 
     public function update(Request $request, int $id)
     {
         $request->validate([
-            'palpacion_tipo'  => 'nullable|string|max:11',
-            'palpacion_fecha' => 'nullable|date',
+            'tipo'       => 'nullable|string|max:25',
+            'fecha'      => 'required|date',
+            'tecnico_id' => 'nullable|integer',
+        ], [
+            'fecha.required' => 'La fecha de la palpación es requerida.',
         ]);
 
-        $data = $request->only(['id_Tecnico', 'palpacion_tipo', 'palpacion_fecha']);
-        if (isset($data['id_Tecnico']) && $data['id_Tecnico'] === '') $data['id_Tecnico'] = null;
+        $data = [
+            'personal_finca_id' => $request->filled('tecnico_id') ? (int)$request->input('tecnico_id') : null,
+            'tipo'              => $request->input('tipo'),
+            'fecha'             => $request->input('fecha'),
+        ];
 
         $response = $this->service->update($id, $data);
         if ($response['success'] ?? false) {
@@ -144,7 +224,7 @@ class PalpacionController extends Controller
     {
         $response = $this->service->eliminar($id);
         if ($response['success'] ?? false) {
-            return redirect()->route('palpacion.index')->with('success', 'Palpación eliminada.');
+            return redirect()->route('palpacion.index')->with('success', 'Palpación eliminada exitosamente.');
         }
         return redirect()->route('palpacion.index')->with('error', $this->apiMessage($response, 'Error al eliminar.'));
     }

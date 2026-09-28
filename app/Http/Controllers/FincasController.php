@@ -26,23 +26,40 @@ class FincasController extends Controller
     {
         $nombre     = $request->query('nombre', '');
         $tipoFiltro = $request->query('tipo', '');
+        
+        $incluirArchivados = $request->boolean('incluir_archivados');
+        $archivado         = $request->boolean('archivado');
 
-        $response = $this->fincasService->getFincas();
-        $fincas   = ($response['success'] ?? false) ? ($response['data']['data'] ?? []) : [];
+        // Cargar todas las fincas (activas y archivadas) para permitir filtrado reactivo e instantáneo en la vista
+        $response = $this->fincasService->getFincas(['incluir_archivados' => true]);
+        
+        $fincas = [];
+        if (isset($response['success']) && $response['success']) {
+            $fincas = $response['data']['data'] ?? $response['data'] ?? [];
+        }
 
-        // Tipos únicos para el filtro
-        $tipos = array_values(array_unique(array_filter(array_column($fincas, 'Explotacion_Tipo'))));
+        // Tipos únicos para el filtro (V2 explotacion_tipo)
+        $tiposList = array_map(fn($f) => $f['explotacion_tipo'] ?? null, $fincas);
+        $tipos = array_values(array_unique(array_filter($tiposList)));
         sort($tipos);
 
-        return view('fincas.index', compact('fincas', 'tipos', 'nombre', 'tipoFiltro'));
+        return view('fincas.index', compact('fincas', 'tipos', 'nombre', 'tipoFiltro', 'archivado', 'incluirArchivados'));
     }
 
     /**
-     * Redirect legacy dashboard URL to fincas index
+     * Display details of a specific finca
      */
-    public function dashboard($id)
+    public function show($id)
     {
-        return redirect()->route('fincas.index');
+        $response = $this->fincasService->getFinca((int)$id);
+
+        if (!isset($response['success']) || !$response['success'] || empty($response['data'])) {
+            return redirect()->route('fincas.index')->with('error', 'Finca no encontrada');
+        }
+
+        $finca = $response['data'];
+
+        return view('fincas.show', compact('finca'));
     }
 
     /**
@@ -50,7 +67,6 @@ class FincasController extends Controller
      */
     public function create()
     {
-        // Load all configuration options
         $fuenteAgua = $this->configuracionService->getFuenteAgua();
         $tipoExplotacion = $this->configuracionService->getTipoExplotacion();
         $tipoRelieve = $this->configuracionService->getTipoRelieve();
@@ -69,36 +85,36 @@ class FincasController extends Controller
     }
 
     /**
-     * Store a new finca
+     * Store a new finca (API V2 payload format)
      */
     public function store(Request $request)
     {
-        // Get the current user
         $user = session('user');
         
         if (!$user || !isset($user['id'])) {
             return redirect()->route('login')->with('error', 'Usuario no autenticado');
         }
 
-        // Prepare data for API
+        $propietarioId = $user['propietario']['id'] ?? $user['id'];
+
         $data = [
-            'Nombre' => $request->input('Nombre'),
-            'Explotacion_Tipo' => $request->input('Explotacion_Tipo'),
-            'id_Propietario' => $user['id'],
+            'nombre' => $request->input('nombre') ?? $request->input('Nombre'),
+            'explotacion_tipo' => $request->input('explotacion_tipo') ?? $request->input('Explotacion_Tipo'),
+            'propietario_id' => $propietarioId,
             'terreno' => [
-                'Superficie' => (float)$request->input('Superficie'),
-                'Relieve' => $request->input('Relieve'),
-                'Suelo_Textura' => $request->input('Suelo_Textura'),
-                'ph_Suelo' => $request->input('ph_Suelo'),
-                'Precipitacion' => (float)$request->input('Precipitacion'),
-                'Velocidad_Viento' => (float)$request->input('Velocidad_Viento'),
-                'Temp_Anual' => $request->input('Temp_Anual'),
-                'Temp_Min' => $request->input('Temp_Min'),
-                'Temp_Max' => $request->input('Temp_Max'),
-                'Radiacion' => (float)$request->input('Radiacion'),
-                'Fuente_Agua' => $request->input('Fuente_Agua'),
-                'Caudal_Disponible' => (int)$request->input('Caudal_Disponible'),
-                'Riego_Metodo' => $request->input('Riego_Metodo'),
+                'superficie' => (float)($request->input('superficie') ?? $request->input('Superficie', 0)),
+                'relieve' => $request->input('relieve') ?? $request->input('Relieve'),
+                'suelo_textura' => $request->input('suelo_textura') ?? $request->input('Suelo_Textura'),
+                'ph_suelo' => $request->input('ph_suelo') ?? $request->input('ph_Suelo'),
+                'precipitacion' => (float)($request->input('precipitacion') ?? $request->input('Precipitacion', 0)),
+                'velocidad_viento' => (float)($request->input('velocidad_viento') ?? $request->input('Velocidad_Viento', 0)),
+                'temp_anual' => (string)($request->input('temp_anual') ?? $request->input('Temp_Anual', '')),
+                'temp_min' => (string)($request->input('temp_min') ?? $request->input('Temp_Min', '')),
+                'temp_max' => (string)($request->input('temp_max') ?? $request->input('Temp_Max', '')),
+                'radiacion' => (float)($request->input('radiacion') ?? $request->input('Radiacion', 0)),
+                'fuente_agua' => $request->input('fuente_agua') ?? $request->input('Fuente_Agua'),
+                'caudal_disponible' => (int)($request->input('caudal_disponible') ?? $request->input('Caudal_Disponible', 0)),
+                'riego_metodo' => $request->input('riego_metodo') ?? $request->input('Riego_Metodo'),
             ]
         ];
 
@@ -118,8 +134,7 @@ class FincasController extends Controller
      */
     public function edit($id)
     {
-        // Get the finca details
-        $fincaResponse = $this->fincasService->getFinca($id);
+        $fincaResponse = $this->fincasService->getFinca((int)$id);
 
         if (!isset($fincaResponse['success']) || !$fincaResponse['success']) {
             return redirect()->route('fincas.index')->with('error', 'Finca no encontrada');
@@ -131,7 +146,6 @@ class FincasController extends Controller
             return redirect()->route('fincas.index')->with('error', 'Finca no encontrada');
         }
 
-        // Load all configuration options
         $fuenteAgua = $this->configuracionService->getFuenteAgua();
         $tipoExplotacion = $this->configuracionService->getTipoExplotacion();
         $tipoRelieve = $this->configuracionService->getTipoRelieve();
@@ -151,40 +165,40 @@ class FincasController extends Controller
     }
 
     /**
-     * Update an existing finca
+     * Update an existing finca (API V2 payload format)
      */
     public function update(Request $request, $id)
     {
-        // Get the current user
         $user = session('user');
         
         if (!$user || !isset($user['id'])) {
             return redirect()->route('login')->with('error', 'Usuario no autenticado');
         }
 
-        // Prepare data for API
+        $propietarioId = $user['propietario']['id'] ?? $user['id'];
+
         $data = [
-            'Nombre' => $request->input('Nombre'),
-            'Explotacion_Tipo' => $request->input('Explotacion_Tipo'),
-            'id_Propietario' => $user['id'],
+            'nombre' => $request->input('nombre') ?? $request->input('Nombre'),
+            'explotacion_tipo' => $request->input('explotacion_tipo') ?? $request->input('Explotacion_Tipo'),
+            'propietario_id' => $propietarioId,
             'terreno' => [
-                'Superficie' => (float)$request->input('Superficie'),
-                'Relieve' => $request->input('Relieve'),
-                'Suelo_Textura' => $request->input('Suelo_Textura'),
-                'ph_Suelo' => $request->input('ph_Suelo'),
-                'Precipitacion' => (float)$request->input('Precipitacion'),
-                'Velocidad_Viento' => (float)$request->input('Velocidad_Viento'),
-                'Temp_Anual' => $request->input('Temp_Anual'),
-                'Temp_Min' => $request->input('Temp_Min'),
-                'Temp_Max' => $request->input('Temp_Max'),
-                'Radiacion' => (float)$request->input('Radiacion'),
-                'Fuente_Agua' => $request->input('Fuente_Agua'),
-                'Caudal_Disponible' => (int)$request->input('Caudal_Disponible'),
-                'Riego_Metodo' => $request->input('Riego_Metodo'),
+                'superficie' => (float)($request->input('superficie') ?? $request->input('Superficie', 0)),
+                'relieve' => $request->input('relieve') ?? $request->input('Relieve'),
+                'suelo_textura' => $request->input('suelo_textura') ?? $request->input('Suelo_Textura'),
+                'ph_suelo' => $request->input('ph_suelo') ?? $request->input('ph_Suelo'),
+                'precipitacion' => (float)($request->input('precipitacion') ?? $request->input('Precipitacion', 0)),
+                'velocidad_viento' => (float)($request->input('velocidad_viento') ?? $request->input('Velocidad_Viento', 0)),
+                'temp_anual' => (string)($request->input('temp_anual') ?? $request->input('Temp_Anual', '')),
+                'temp_min' => (string)($request->input('temp_min') ?? $request->input('Temp_Min', '')),
+                'temp_max' => (string)($request->input('temp_max') ?? $request->input('Temp_Max', '')),
+                'radiacion' => (float)($request->input('radiacion') ?? $request->input('Radiacion', 0)),
+                'fuente_agua' => $request->input('fuente_agua') ?? $request->input('Fuente_Agua'),
+                'caudal_disponible' => (int)($request->input('caudal_disponible') ?? $request->input('Caudal_Disponible', 0)),
+                'riego_metodo' => $request->input('riego_metodo') ?? $request->input('Riego_Metodo'),
             ]
         ];
 
-        $response = $this->fincasService->updateFinca($id, $data);
+        $response = $this->fincasService->updateFinca((int)$id, $data);
 
         if (isset($response['success']) && $response['success']) {
             return redirect()->route('fincas.index')->with('success', 'Finca actualizada exitosamente');
@@ -211,4 +225,135 @@ class FincasController extends Controller
             'message' => $response['message'] ?? 'Error al obtener las fincas'
         ], 500);
     }
+
+    /**
+     * Muestra la vista de formulario para importar fincas masivamente vía CSV/TXT.
+     *
+     * @param Request $request
+     * @return \Illuminate\View\View
+     */
+    public function importarForm(Request $request)
+    {
+        $user = session('user');
+        $propietarioId = $user['propietario']['id'] ?? $user['id'] ?? null;
+
+        return view('fincas.importar', compact('propietarioId'));
+    }
+
+    /**
+     * Procesa la importación masiva de fincas.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function importar(Request $request)
+    {
+        $request->validate([
+            'archivo'        => 'required|file|max:10240',
+            'propietario_id' => 'nullable|integer',
+        ], [
+            'archivo.required' => 'Debe seleccionar un archivo .csv o .txt para procesar.',
+            'archivo.file'     => 'El elemento subido no es un archivo válido.',
+            'archivo.max'      => 'El tamaño del archivo no debe exceder los 10MB.',
+        ]);
+
+        $user = session('user');
+        $propietarioId = $request->input('propietario_id') ?: ($user['propietario']['id'] ?? null);
+
+        $response = $this->fincasService->importarFincas(
+            $request->file('archivo'),
+            $propietarioId ? (int)$propietarioId : null
+        );
+
+        if ($response['success'] ?? false) {
+            return redirect()->route('fincas.index')
+                ->with('success', $response['message'] ?? 'Fincas importadas exitosamente.');
+        }
+
+        $errorMessage = $response['message'] ?? 'Ocurrió un error al procesar el archivo.';
+        $importErrors = $response['errors']['import_errors'] ?? ($response['errors'] ?? []);
+
+        return redirect()->back()
+            ->withInput()
+            ->with('error', $errorMessage)
+            ->with('import_errors', (array)$importErrors);
+    }
+
+    /**
+     * Genera y descarga un archivo CSV de ejemplo con encabezados y filas de muestra.
+     *
+     * @param Request $request
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse
+     */
+    public function descargarPlantilla(Request $request)
+    {
+        $delimitador = $request->query('delimitador') === 'punto_coma' ? ';' : ',';
+        $headers = [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="plantilla_fincas.csv"',
+        ];
+
+        $columns = ['nombre', 'explotacion_tipo', 'identificador_hierro', 'superficie', 'relieve', 'fuente_agua'];
+        $samples = [
+            ['Hacienda Santa Ines', 'Mixto', 'HSI-01', '150.5', 'Plano', 'Rio'],
+            ['Finca El Porvenir', 'Intensiva', 'FEP-02', '85.0', 'Ondulado', 'Pozo'],
+            ['Agropecuaria San Jose', 'Extensiva', '', '220.0', 'Plano', 'Quebrada'],
+        ];
+
+        $callback = function () use ($columns, $samples, $delimitador) {
+            $file = fopen('php://output', 'w');
+            // Inyectar BOM UTF-8 para compatibilidad transparente con Excel
+            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+            fputcsv($file, $columns, $delimitador);
+            foreach ($samples as $sample) {
+                fputcsv($file, $sample, $delimitador);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Archiva una finca activa.
+     */
+    public function archive($id)
+    {
+        $response = $this->fincasService->archiveFinca((int)$id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->back()->with('success', $response['message'] ?? 'Finca archivada exitosamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al archivar la finca.');
+    }
+
+    /**
+     * Desarchiva una finca archivada.
+     */
+    public function unarchive($id)
+    {
+        $response = $this->fincasService->unarchiveFinca((int)$id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->back()->with('success', $response['message'] ?? 'Finca desarchivada exitosamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al desarchivar la finca.');
+    }
+
+    /**
+     * Elimina definitivamente una finca y sus dependencias en cascada.
+     */
+    public function destroy($id)
+    {
+        $response = $this->fincasService->deleteFinca((int)$id);
+
+        if ($response['success'] ?? false) {
+            return redirect()->route('fincas.index')->with('success', $response['message'] ?? 'Finca eliminada definitivamente.');
+        }
+
+        return redirect()->back()->with('error', $response['message'] ?? 'Error al eliminar la finca.');
+    }
 }
+

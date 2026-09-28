@@ -6,50 +6,78 @@ use App\Services\Contracts\TratamientoServiceInterface;
 
 class ApiTratamientoService extends BaseApiService implements TratamientoServiceInterface
 {
-    private function authHeaders(): array
-    {
-        return [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . (session('user')['token'] ?? ''),
-        ];
-    }
-
+    /**
+     * Obtiene el listado de tratamientos con filtros opcionales.
+     *
+     * @param int|null $diagnosticoId
+     * @param string|null $fechaInicio
+     * @param string|null $fechaFin
+     * @return array
+     */
     public function getList(?int $diagnosticoId = null, ?string $fechaInicio = null, ?string $fechaFin = null): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        $params = array_filter(['diagnostico_id' => $diagnosticoId, 'fecha_inicio' => $fechaInicio, 'fecha_fin' => $fechaFin]);
-        $endpoint = '/tratamiento' . (!empty($params) ? '?' . http_build_query($params) : '');
-        return $this->get($endpoint, $this->authHeaders());
+        $params = [
+            'diagnostico_id' => $diagnosticoId,
+            'fecha_inicio'   => $fechaInicio,
+            'fecha_fin'      => $fechaFin,
+        ];
+
+        return $this->get('/tratamiento' . $this->buildQuery($params, true));
     }
 
+    /**
+     * Obtiene el detalle de un tratamiento por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function getById(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'data' => []];
-        return $this->get("/tratamiento/{$id}", $this->authHeaders());
+        return $this->get("/tratamiento/{$id}");
     }
 
+    /**
+     * Registra un nuevo tratamiento.
+     *
+     * @param array $data
+     * @return array
+     */
     public function create(array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->post('/tratamiento', $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->post('/tratamiento', $data);
     }
 
+    /**
+     * Actualiza un tratamiento existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
+     */
     public function update(int $id, array $data): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->put("/tratamiento/{$id}", $data, $this->authHeaders() + ['Content-Type' => 'application/json']);
+        return $this->put("/tratamiento/{$id}", $data);
     }
 
+    /**
+     * Elimina un tratamiento por su ID.
+     *
+     * @param int $id
+     * @return array
+     */
     public function eliminar(int $id): array
     {
-        if (!session('user.token')) return ['success' => false, 'message' => 'Usuario no autenticado'];
-        return $this->delete("/tratamiento/{$id}", $this->authHeaders());
+        return $this->delete("/tratamiento/{$id}");
     }
 
+    /**
+     * Obtiene el listado de diagnósticos para selectores.
+     *
+     * @return array
+     */
     public function getDiagnosticos(): array
     {
-        if (!session('user.token')) return [];
-        $r = $this->get('/diagnostico', $this->authHeaders());
-        return ($r['success'] ?? false) ? ($r['data'] ?? []) : [];
+        $response = $this->get('/diagnostico' . $this->buildQuery([], true));
+        return $this->extractCollection($response);
     }
 }

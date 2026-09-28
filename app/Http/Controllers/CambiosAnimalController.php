@@ -4,275 +4,389 @@ namespace App\Http\Controllers;
 
 use App\Services\Contracts\CambiosAnimalServiceInterface;
 use App\Services\Contracts\ConfiguracionServiceInterface;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\View\View;
 
+/**
+ * Controlador encargado de gestionar el flujo de interfaz de usuario para los cambios de etapa
+ * y evolución física de los animales.
+ */
 class CambiosAnimalController extends Controller
 {
-    protected $cambiosAnimalService;
-    protected $configuracionService;
-
+    /**
+     * Inyección de dependencias para los servicios de negocio de Cambios de Animal y Configuración.
+     *
+     * @param CambiosAnimalServiceInterface $cambiosAnimalService
+     * @param ConfiguracionServiceInterface $configuracionService
+     */
     public function __construct(
-        CambiosAnimalServiceInterface $cambiosAnimalService,
-        ConfiguracionServiceInterface $configuracionService
-    ) {
-        $this->cambiosAnimalService = $cambiosAnimalService;
-        $this->configuracionService = $configuracionService;
-    }
+        protected CambiosAnimalServiceInterface $cambiosAnimalService,
+        protected ConfiguracionServiceInterface $configuracionService
+    ) {}
 
     /**
-     * Muestra la lista de cambios de animales
+     * Muestra la lista paginada/filtrada de cambios de animales y sus métricas principales.
+     *
+     * @param Request $request
+     * @return View|RedirectResponse
      */
-    public function index(Request $request)
+    public function index(Request $request): View|RedirectResponse
     {
         try {
-            Log::info('CambiosAnimalController@index - Iniciando carga de datos');
-            
-            $idAnimal  = $request->get('animal_id');
-            $idFinca   = $request->get('finca_id');
-            $idRebano  = $request->get('rebano_id');
+            $idAnimal = $request->query('animal_id') ? (int) $request->query('animal_id') : null;
+            $idFinca  = $request->query('finca_id')  ? (int) $request->query('finca_id')  : null;
+            $idRebano = $request->query('rebano_id') ? (int) $request->query('rebano_id') : null;
 
-            // Cargar datos para dropdowns
-            $animalesTodos = $this->cambiosAnimalService->getAnimales();
-            $fincas        = $this->cambiosAnimalService->getFincas();
-            $rebanos       = $this->cambiosAnimalService->getRebanos();
+            // Cargar catálogos completos para filtros y selects
+            $animalesTodos = $this->cambiosAnimalService->getAnimales(['incluir_archivados' => true]);
+            $fincas        = $this->cambiosAnimalService->getFincas(['incluir_archivados' => true]);
+            $rebanos       = $this->cambiosAnimalService->getRebanos(['incluir_archivados' => true]);
 
-            // Filtrar rebaños por finca seleccionada
-            if ($idFinca) {
-                $rebanos = array_values(array_filter($rebanos, fn($r) => ($r['id_Finca'] ?? null) == $idFinca));
+            // Mapeos rápidos para enriquecer los registros de cambio
+            $mapaAnimalesPorId = [];
+            $mapaAnimalesPorEtapaId = [];
+
+            foreach ($animalesTodos as $an) {
+                if (!is_array($an) || empty($an['id'])) {
+                    continue;
+                }
+                $anId = (int) $an['id'];
+                $mapaAnimalesPorId[$anId] = $an;
+
+                // Mapear por etapa actual
+                $etapaActualId = data_get($an, 'etapa_actual.id') ?? data_get($an, 'etapa_actual.animal_etapa_id');
+                if ($etapaActualId) {
+                    $mapaAnimalesPorEtapaId[(int) $etapaActualId] = $an;
+                }
+
+                // Mapear por historial de etapas
+                $etapasHistorial = data_get($an, 'etapa_animales', []);
+                if (is_array($etapasHistorial)) {
+                    foreach ($etapasHistorial as $ea) {
+                        if (!empty($ea['id'])) {
+                            $mapaAnimalesPorEtapaId[(int) $ea['id']] = $an;
+                        }
+                    }
+                }
             }
 
-            // Filtrar animales por rebaño o finca
+            // Inferir finca y rebaño si viene animal_id o rebano_id
+            if ($idAnimal && isset($mapaAnimalesPorId[$idAnimal])) {
+                $an = $mapaAnimalesPorId[$idAnimal];
+                $idRebano = $idRebano ?: (data_get($an, 'rebano_id') ?? data_get($an, 'rebano.id'));
+                $idFinca  = $idFinca ?: (data_get($an, 'rebano.finca_id') ?? data_get($an, 'rebano.finca.id'));
+            }
+            if ($idRebano && !$idFinca) {
+                $rebObj = collect($rebanos)->firstWhere('id', $idRebano);
+                if ($rebObj) {
+                    $idFinca = $rebObj['finca_id'] ?? data_get($rebObj, 'finca.id') ?? null;
+                }
+            }
+
             $animales = $animalesTodos;
-            if ($idRebano) {
-                $animales = array_values(array_filter($animales, fn($a) => ($a['id_Rebano'] ?? null) == $idRebano));
-            } elseif ($idFinca) {
-                $animales = array_values(array_filter($animales, fn($a) => ($a['rebano']['id_Finca'] ?? ($a['rebano']['finca']['id_Finca'] ?? null)) == $idFinca));
-            }
 
-            // IDs de animales permitidos por el filtro de finca/rebaño
-            $idsPermitidos = array_column($animales, 'id_Animal');
+            // Consultar historial de cambios completo
+            $cambiosTodos = $this->cambiosAnimalService->getList(null, null);
 
-            // Obtener todos los cambios y filtrar
-            $cambiosTodos = $this->cambiosAnimalService->getList($idAnimal, null);
-            $cambios = $idFinca || $idRebano
-                ? array_values(array_filter($cambiosTodos, fn($c) => in_array($c['cambios_etapa_anid'] ?? null, $idsPermitidos)))
-                : $cambiosTodos;
+            // Enriquecer cada registro de cambio con su animal completo
+            $cambiosEnriquecidos = array_map(function ($c) use ($mapaAnimalesPorId, $mapaAnimalesPorEtapaId) {
+                $anId = (int) ($c['animal_id'] ?? data_get($c, 'animal.id') ?? $c['cambios_etapa_anid'] ?? 0);
+                $etapaAnId = (int) ($c['animal_etapa_id'] ?? $c['cambios_etapa_etid'] ?? 0);
 
-            // Mapear id → nombre de animal para mostrar en tabla
-            $mapaAnimales = [];
-            foreach ($animalesTodos as $a) {
-                if (isset($a['id_Animal'])) $mapaAnimales[$a['id_Animal']] = $a['Nombre'] ?? ('Animal #' . $a['id_Animal']);
-            }
+                $animalData = null;
+                if ($anId && isset($mapaAnimalesPorId[$anId])) {
+                    $animalData = $mapaAnimalesPorId[$anId];
+                } elseif ($etapaAnId && isset($mapaAnimalesPorEtapaId[$etapaAnId])) {
+                    $animalData = $mapaAnimalesPorEtapaId[$etapaAnId];
+                }
+
+                if ($animalData) {
+                    $c['animal_id'] = $animalData['id'];
+                    $c['animal'] = $animalData;
+                    $c['animal_nombre'] = $animalData['nombre'] ?? ('Animal #' . $animalData['id']);
+                } else {
+                    $c['animal_id'] = $anId ?: null;
+                    $c['animal_nombre'] = $c['animal_nombre'] ?? data_get($c, 'animal.nombre') ?? ($anId ? ('Animal #' . $anId) : 'Animal no asignado');
+                }
+
+                return $c;
+            }, $cambiosTodos);
+
+            // Aplicar filtros de finca/rebaño si existen
+            $cambios = ($idFinca || $idRebano)
+                ? array_values(array_filter($cambiosEnriquecidos, function ($c) use ($idsPermitidos) {
+                    $anId = (int) ($c['animal_id'] ?? data_get($c, 'animal.id') ?? 0);
+                    return in_array($anId, $idsPermitidos, true);
+                }))
+                : $cambiosEnriquecidos;
 
             $estadisticas = $this->cambiosAnimalService->getEstadisticas();
+
+            // Mapa simple [id => nombre] para compatibilidad
+            $mapaAnimales = collect($animalesTodos)
+                ->filter(fn ($a) => isset($a['id']))
+                ->mapWithKeys(fn ($a) => [(int) $a['id'] => $a['nombre'] ?? ('Animal #' . $a['id'])])
+                ->all();
 
             return view('cambios-animal.index', compact(
                 'cambios', 'estadisticas', 'animales', 'idAnimal',
                 'fincas', 'rebanos', 'idFinca', 'idRebano', 'mapaAnimales'
             ));
         } catch (\Exception $e) {
-            Log::error('Error en CambiosAnimalController@index: ' . $e->getMessage());
-            Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+            Log::error('Error al cargar la lista de cambios de animales: ' . $e->getMessage(), [
+                'exception' => $e,
+                'request'   => $request->all()
+            ]);
+
             return view('cambios-animal.index', [
-                'cambios' => [],
-                'estadisticas' => ['total_cambios'=>0,'por_etapa'=>[],'ultimos_30_dias'=>0,'promedio_peso'=>0,'promedio_altura'=>0],
-                'animales'    => [],
-                'idAnimal'    => null,
-                'fincas'      => [],
-                'rebanos'     => [],
-                'idFinca'     => null,
-                'idRebano'    => null,
-                'mapaAnimales'=> [],
-            ])->with('error', 'Error al cargar los cambios de animales');
+                'cambios'      => [],
+                'estadisticas' => [
+                    'total_cambios'   => 0,
+                    'por_etapa'       => [],
+                    'ultimos_30_dias' => 0,
+                    'promedio_peso'   => 0,
+                    'promedio_altura' => 0
+                ],
+                'animales'     => [],
+                'idAnimal'     => null,
+                'fincas'       => [],
+                'rebanos'      => [],
+                'idFinca'      => null,
+                'idRebano'     => null,
+                'mapaAnimales' => [],
+            ])->with('error', 'Ocurrió un error al cargar la información de cambios de animales.');
         }
     }
 
     /**
-     * Muestra el formulario de creación de cambio
+     * Muestra el formulario para registrar un nuevo cambio de etapa/desarrollo.
+     *
+     * @return View|RedirectResponse
      */
-    public function create()
+    public function create(): View|RedirectResponse
     {
         try {
             $animales = $this->cambiosAnimalService->getAnimales();
-            $etapas = $this->configuracionService->getEtapas();
-            
+            $etapas   = $this->configuracionService->getEtapas();
+
             return view('cambios-animal.create', compact('animales', 'etapas'));
         } catch (\Exception $e) {
-            Log::error('Error en CambiosAnimalController@create: ' . $e->getMessage());
-            
+            Log::error('Error al preparar el formulario de creación de cambio de animal: ' . $e->getMessage());
+
             return view('cambios-animal.create', [
                 'animales' => [],
-                'etapas' => []
-            ])->with('error', 'Error al cargar los datos del formulario. Por favor, intente de nuevo.');
+                'etapas'   => []
+            ])->with('error', 'Error al cargar las opciones del formulario.');
         }
     }
 
     /**
-     * Almacena un nuevo cambio de animal
+     * Valida y envía el nuevo registro de cambio a la API v2.
+     *
+     * @param Request $request
+     * @return RedirectResponse
      */
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $validatedData = $request->validate([
-            'cambios_etapa_anid' => [
+            'animal_id' => [
                 'required',
                 'integer',
                 'min:1'
             ],
-            'cambios_etapa_etid' => [
+            'etapa_id' => [
                 'required',
                 'integer',
                 'min:1'
             ],
-            'Fecha_Cambio' => [
+            'animal_etapa_id' => [
+                'nullable',
+                'integer'
+            ],
+            'fecha_cambio' => [
                 'required',
                 'date',
                 'before_or_equal:today'
             ],
-            'Etapa_Cambio' => [
+            'etapa_cambio' => [
                 'required',
                 'string',
                 'max:50',
                 'regex:/^[a-zA-ZáéíóúñÁÉÍÓÚÑ\s]+$/'
             ],
-            'Peso' => [
+            'peso' => [
                 'nullable',
                 'numeric',
                 'min:1',
                 'max:2000'
             ],
-            'Altura' => [
+            'altura' => [
                 'nullable',
                 'numeric',
                 'min:10',
                 'max:300'
             ],
-            'Comentario' => [
+            'comentario' => [
                 'nullable',
                 'string',
                 'max:500'
             ]
         ], [
-            // Mensajes de validación en español
-            'cambios_etapa_anid.required' => 'Debe seleccionar un animal',
-            'cambios_etapa_anid.integer' => 'El animal seleccionado no es válido',
-            'cambios_etapa_anid.min' => 'Debe seleccionar un animal válido',
-            'cambios_etapa_etid.required' => 'Debe seleccionar una etapa',
-            'cambios_etapa_etid.integer' => 'La etapa seleccionada no es válida',
-            'cambios_etapa_etid.min' => 'Debe seleccionar una etapa válida',
-            'Fecha_Cambio.required' => 'La fecha del cambio es obligatoria',
-            'Fecha_Cambio.date' => 'La fecha del cambio debe ser una fecha válida',
-            'Fecha_Cambio.before_or_equal' => 'La fecha del cambio no puede ser futura',
-            'Etapa_Cambio.required' => 'El nombre de la etapa es obligatorio',
-            'Etapa_Cambio.string' => 'El nombre de la etapa debe ser texto',
-            'Etapa_Cambio.max' => 'El nombre de la etapa no puede exceder 50 caracteres',
-            'Etapa_Cambio.regex' => 'El nombre de la etapa solo puede contener letras y espacios',
-            'Peso.numeric' => 'El peso debe ser un número válido',
-            'Peso.min' => 'El peso mínimo es 1 kg',
-            'Peso.max' => 'El peso máximo es 2000 kg',
-            'Altura.numeric' => 'La altura debe ser un número válido',
-            'Altura.min' => 'La altura mínima es 10 cm',
-            'Altura.max' => 'La altura máxima es 300 cm',
-            'Comentario.string' => 'El comentario debe ser texto',
-            'Comentario.max' => 'El comentario no puede exceder 500 caracteres'
+            'animal_id.required'           => 'Debe seleccionar un animal.',
+            'animal_id.integer'            => 'El animal seleccionado no es válido.',
+            'animal_id.min'                => 'Debe seleccionar un animal válido.',
+            'etapa_id.required'            => 'Debe seleccionar una etapa.',
+            'etapa_id.integer'             => 'La etapa seleccionada no es válida.',
+            'etapa_id.min'                 => 'Debe seleccionar una etapa válida.',
+            'fecha_cambio.required'        => 'La fecha del cambio es obligatoria.',
+            'fecha_cambio.date'            => 'La fecha del cambio debe ser una fecha válida.',
+            'fecha_cambio.before_or_equal' => 'La fecha del cambio no puede ser futura.',
+            'etapa_cambio.required'        => 'El nombre de la etapa es obligatorio.',
+            'etapa_cambio.string'          => 'El nombre de la etapa debe ser texto.',
+            'etapa_cambio.max'             => 'El nombre de la etapa no puede exceder 50 caracteres.',
+            'etapa_cambio.regex'           => 'El nombre de la etapa solo puede contener letras y espacios.',
+            'peso.numeric'                 => 'El peso debe ser un número válido.',
+            'peso.min'                     => 'El peso mínimo es 1 kg.',
+            'peso.max'                     => 'El peso máximo es 2000 kg.',
+            'altura.numeric'               => 'La altura debe ser un número válido.',
+            'altura.min'                   => 'La altura mínima es 10 cm.',
+            'altura.max'                   => 'La altura máxima es 300 cm.',
+            'comentario.string'            => 'El comentario debe ser texto.',
+            'comentario.max'               => 'El comentario no puede exceder 500 caracteres.'
         ]);
 
         try {
+            // Resolver animal_etapa_id si no vino en el formulario
+            if (empty($validatedData['animal_etapa_id']) && !empty($validatedData['animal_id'])) {
+                $animal = $this->cambiosAnimalService->getAnimalById((int) $validatedData['animal_id']);
+                $etapaActId = data_get($animal, 'etapa_actual.id') ?? data_get($animal, 'etapa_actual.animal_etapa_id');
+                if ($etapaActId) {
+                    $validatedData['animal_etapa_id'] = (int) $etapaActId;
+                }
+            }
+
             $response = $this->cambiosAnimalService->create($validatedData);
 
-            if ($response['success']) {
+            if ($response['success'] ?? false) {
                 return redirect()->route('cambios-animal.index')
-                    ->with('success', 'Cambio de animal registrado exitosamente');
-            } else {
-                return redirect()->back()
-                    ->withInput()
-                    ->with('error', $response['message'] ?? 'Error al registrar el cambio');
+                    ->with('success', 'Cambio de animal registrado exitosamente.');
             }
-        } catch (\Exception $e) {
-            Log::error('Error en CambiosAnimalController@store: ' . $e->getMessage());
-            
+
             return redirect()->back()
                 ->withInput()
-                ->with('error', 'Error interno del servidor. Inténtelo de nuevo.');
+                ->with('error', $response['message'] ?? 'Error al registrar el cambio de animal.');
+        } catch (\Exception $e) {
+            Log::error('Error en CambiosAnimalController@store: ' . $e->getMessage(), [
+                'exception' => $e,
+                'payload'   => $validatedData
+            ]);
+
+            return redirect()->back()
+                ->withInput()
+                ->with('error', 'Error interno al procesar la solicitud.');
         }
     }
 
     /**
-     * Muestra los detalles de un cambio específico
+     * Muestra la vista detallada de un registro de cambio específico.
+     *
+     * @param int $id ID del cambio
+     * @return View|RedirectResponse
      */
-    public function show(string $id)
+    public function show(int $id): View|RedirectResponse
     {
         try {
-            $cambio = $this->cambiosAnimalService->getById($id);
-            
-            if (empty($cambio)) {
+            $response = $this->cambiosAnimalService->getById($id);
+
+            if (!($response['success'] ?? false) || empty($response['data'])) {
                 return redirect()->route('cambios-animal.index')
-                    ->with('error', 'Cambio no encontrado');
+                    ->with('error', 'El registro de cambio no fue encontrado.');
             }
-            
+
+            $cambio = $response['data'];
+
+            // Resolver información completa del animal
+            $animalId = (int) ($cambio['animal_id'] ?? data_get($cambio, 'animal.id') ?? $cambio['cambios_etapa_anid'] ?? 0);
+            $etapaAnId = (int) ($cambio['animal_etapa_id'] ?? $cambio['cambios_etapa_etid'] ?? 0);
+
+            if ($animalId) {
+                $animalData = $this->cambiosAnimalService->getAnimalById($animalId);
+                if ($animalData) {
+                    $cambio['animal'] = $animalData;
+                    $cambio['animal_id'] = $animalId;
+                    $cambio['animal_nombre'] = $animalData['nombre'] ?? ('Animal #' . $animalId);
+                }
+            } elseif ($etapaAnId) {
+                $animalesTodos = $this->cambiosAnimalService->getAnimales();
+                foreach ($animalesTodos as $an) {
+                    $eaId = data_get($an, 'etapa_actual.id') ?? data_get($an, 'etapa_actual.animal_etapa_id');
+                    if ($eaId == $etapaAnId) {
+                        $cambio['animal'] = $an;
+                        $cambio['animal_id'] = $an['id'];
+                        $cambio['animal_nombre'] = $an['nombre'] ?? ('Animal #' . $an['id']);
+                        break;
+                    }
+                }
+            }
+
             return view('cambios-animal.show', compact('cambio'));
         } catch (\Exception $e) {
-            Log::error('Error en CambiosAnimalController@show: ' . $e->getMessage());
-            
+            Log::error("Error al visualizar el cambio de animal ID {$id}: " . $e->getMessage());
+
             return redirect()->route('cambios-animal.index')
-                ->with('error', 'Error al cargar los detalles del cambio');
+                ->with('error', 'Error al consultar los detalles del cambio.');
         }
     }
 
     /**
-     * Elimina un cambio de animal
+     * Maneja las solicitudes de eliminación de cambios.
+     *
+     * @param int $id ID del cambio
+     * @return RedirectResponse
      */
-    public function destroy(string $id)
+    public function destroy(int $id): RedirectResponse
     {
-        try {
-            // Por el momento, no implementamos eliminación ya que no hay endpoint DELETE en la API
-            return redirect()->route('cambios-animal.index')
-                ->with('info', 'La eliminación de cambios no está disponible por políticas de auditoría');
-        } catch (\Exception $e) {
-            Log::error('Error en CambiosAnimalController@destroy: ' . $e->getMessage());
-            
-            return redirect()->route('cambios-animal.index')
-                ->with('error', 'Error al procesar la solicitud');
-        }
+        return redirect()->route('cambios-animal.index')
+            ->with('info', 'La eliminación de registros de cambio no está permitida por políticas de auditoría.');
     }
 
     /**
-     * Obtiene la etapa actual de un animal específico (AJAX)
+     * Endpoint AJAX para consultar la etapa actual de un animal específico.
+     *
+     * @param Request $request
+     * @param int $id ID del animal
+     * @return JsonResponse
      */
-    public function getAnimalEtapa(Request $request, $id)
+    public function getAnimalEtapa(Request $request, int $id): JsonResponse
     {
         try {
-            Log::info('CambiosAnimalController@getAnimalEtapa - Obteniendo etapa para animal: ' . $id);
-            
             $animal = $this->cambiosAnimalService->getAnimalById($id);
-            
+
             if (empty($animal)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Animal no encontrado'
                 ], 404);
             }
-            
-            Log::info('CambiosAnimalController@getAnimalEtapa - Animal obtenido', [
-                'animal_id' => $id,
-                'has_etapa_actual' => isset($animal['etapa_actual']),
-                'etapa_actual_structure' => $animal['etapa_actual'] ?? 'null'
-            ]);
-            
+
+            $etapaActual = $animal['etapa_actual'] ?? null;
+
             return response()->json([
                 'success' => true,
-                'data' => [
-                    'animal' => $animal,
-                    'etapa_actual' => $animal['etapa_actual'] ?? null
+                'data'    => [
+                    'animal'       => $animal,
+                    'etapa_actual' => $etapaActual
                 ]
             ]);
         } catch (\Exception $e) {
-            Log::error('Error en getAnimalEtapa: ' . $e->getMessage(), ['animal_id' => $id]);
-            
+            Log::error("Error en AJAX getAnimalEtapa para animal ID {$id}: " . $e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Error al obtener etapa del animal'
+                'message' => 'Error al consultar la etapa actual del animal'
             ], 500);
         }
     }

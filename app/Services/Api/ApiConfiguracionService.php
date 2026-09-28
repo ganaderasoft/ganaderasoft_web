@@ -4,160 +4,79 @@ namespace App\Services\Api;
 
 use App\Services\Contracts\ConfiguracionServiceInterface;
 
+/**
+ * Servicio encargado de gestionar las opciones de configuración y catálogos globales.
+ */
 class ApiConfiguracionService extends BaseApiService implements ConfiguracionServiceInterface
 {
     /**
-     * Get list of etapas options
+     * Obtiene el listado completo de etapas del sistema sin paginación.
+     *
+     * @return array
      */
     public function getEtapas(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [];
-        }
-
-        $response = $this->get('/etapas', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        if (isset($response['success']) && $response['success']) {
-            return $response['data'] ?? [];
-        }
-
-        return [];
+        $response = $this->get('/etapas' . $this->buildQuery([], true));
+        return $this->extractCollection($response);
     }
 
     /**
-     * Get list of fuente agua options
+     * Obtiene el catálogo de opciones de fuente de agua.
+     *
+     * @return array
      */
     public function getFuenteAgua(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/configuracion/fuente-agua', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/configuracion/fuente-agua');
     }
 
     /**
-     * Get list of tipo explotacion options
+     * Obtiene el catálogo de opciones de tipo de explotación.
+     *
+     * @return array
      */
     public function getTipoExplotacion(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/configuracion/tipo-explotacion', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/configuracion/tipo-explotacion');
     }
 
     /**
-     * Get list of tipo relieve options
+     * Obtiene el catálogo de opciones de tipo de relieve.
+     *
+     * @return array
      */
     public function getTipoRelieve(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/configuracion/tipo-relieve', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/configuracion/tipo-relieve');
     }
 
     /**
-     * Get list of textura suelo options
+     * Obtiene el catálogo de opciones de textura de suelo.
+     *
+     * @return array
      */
     public function getTexturaSuelo(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/configuracion/textura-suelo', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/configuracion/textura-suelo');
     }
 
     /**
-     * Get list of ph suelo options
+     * Obtiene el catálogo de opciones de pH de suelo.
+     *
+     * @return array
      */
     public function getPhSuelo(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/configuracion/ph-suelo', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/configuracion/ph-suelo');
     }
 
     /**
-     * Get list of metodo riego options
+     * Obtiene el catálogo de opciones de método de riego.
+     *
+     * @return array
      */
     public function getMetodoRiego(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/configuracion/metodo-riego', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/configuracion/metodo-riego');
     }
 }

@@ -4,136 +4,79 @@ namespace App\Services\Api;
 
 use App\Services\Contracts\LecheServiceInterface;
 
+/**
+ * Servicio encargado de gestionar los registros de producción lechera.
+ */
 class ApiLecheService extends BaseApiService implements LecheServiceInterface
 {
     /**
-     * Get list of milk production records
+     * Obtiene la lista de registros de producción de leche con soporte nopaginate.
+     *
+     * @param int|null $lactanciaId
+     * @param string|null $fechaInicio
+     * @param string|null $fechaFin
+     * @param bool $nopaginate
+     * @return array
      */
-    public function getRegistrosLeche(?int $lactanciaId = null, ?string $fechaInicio = null, ?string $fechaFin = null): array
+    public function getRegistrosLeche(?int $lactanciaId = null, ?string $fechaInicio = null, ?string $fechaFin = null, bool $nopaginate = true): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
+        $params = [
+            'lactancia_id' => $lactanciaId,
+            'fecha_inicio' => $fechaInicio,
+            'fecha_fin'    => $fechaFin,
+        ];
+
+        $response = $this->get('/leche' . $this->buildQuery($params, $nopaginate));
+
+        if (!($response['success'] ?? false)) {
+            return ['success' => false, 'data' => [], 'message' => $response['message'] ?? 'Error al consultar registros de leche'];
         }
 
-        $endpoint = '/leche';
-        $params = [];
-        
-        if ($lactanciaId) {
-            $params['lactancia_id'] = $lactanciaId;
-        }
-        
-        if ($fechaInicio) {
-            $params['fecha_inicio'] = $fechaInicio;
-        }
-        
-        if ($fechaFin) {
-            $params['fecha_fin'] = $fechaFin;
-        }
-
-        if (!empty($params)) {
-            $endpoint .= '?' . http_build_query($params);
-        }
-
-        $response = $this->get($endpoint, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return ['success' => true, 'data' => $this->extractCollection($response)];
     }
 
     /**
-     * Get a single milk production record by ID
+     * Obtiene un registro de producción de leche por ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function getRegistroLeche(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get("/leche/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get("/leche/{$id}");
     }
 
     /**
-     * Create a new milk production record
+     * Crea un nuevo registro de producción de leche.
+     *
+     * @param array $data
+     * @return array
      */
     public function createRegistroLeche(array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->post('/leche', $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->post('/leche', $data);
     }
 
     /**
-     * Update an existing milk production record
+     * Actualiza un registro de producción de leche existente.
+     *
+     * @param int $id
+     * @param array $data
+     * @return array
      */
     public function updateRegistroLeche(int $id, array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->put("/leche/{$id}", $data, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-            'Content-Type' => 'application/json',
-        ]);
-
-        return $response;
+        return $this->put("/leche/{$id}", $data);
     }
 
     /**
-     * Delete a milk production record
+     * Elimina un registro de producción de leche por su ID.
+     *
+     * @param int $id
+     * @return array
      */
     public function deleteRegistroLeche(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->delete("/leche/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->delete("/leche/{$id}");
     }
 }

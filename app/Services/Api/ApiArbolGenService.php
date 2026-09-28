@@ -6,61 +6,50 @@ use App\Services\Contracts\ArbolGenServiceInterface;
 
 class ApiArbolGenService extends BaseApiService implements ArbolGenServiceInterface
 {
-    private function getUser(): ?array
-    {
-        $user = session('user');
-        return ($user && isset($user['token'])) ? $user : null;
-    }
-
-    private function authHeaders(array $user): array
-    {
-        return [
-            'Accept'        => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ];
-    }
-
+    /**
+     * Obtiene el árbol genealógico completo de un animal (hasta 3 generaciones y descendencia).
+     *
+     * @param int $animalId Identificador único del animal.
+     * @return array
+     */
     public function getArbol(int $animalId): array
     {
-        $user = $this->getUser();
-        if (!$user) {
-            return ['success' => false, 'data' => []];
-        }
-
-        return $this->get("/animales/{$animalId}/arbol", $this->authHeaders($user));
+        return $this->get("/animales/{$animalId}/arbol");
     }
 
+    /**
+     * Registra o actualiza la relación de un progenitor (Padre o Madre) para un animal.
+     *
+     * @param int $animalId Identificador único del animal hijo.
+     * @param array $data Datos de la relación (tipo: 'Padre'|'Madre', padre_id: int).
+     * @return array
+     */
     public function setProgenitor(int $animalId, array $data): array
     {
-        $user = $this->getUser();
-        if (!$user) {
-            return ['success' => false, 'message' => 'Usuario no autenticado'];
-        }
-
-        return $this->post(
-            "/animales/{$animalId}/progenitor",
-            $data,
-            $this->authHeaders($user) + ['Content-Type' => 'application/json']
-        );
+        return $this->post("/animales/{$animalId}/progenitor", $data);
     }
 
+    /**
+     * Elimina la relación de un progenitor (Padre o Madre) de un animal.
+     *
+     * @param int $animalId Identificador único del animal hijo.
+     * @param string $tipo Tipo de progenitor a eliminar ('Padre' o 'Madre').
+     * @return array
+     */
     public function removeProgenitor(int $animalId, string $tipo): array
     {
-        $user = $this->getUser();
-        if (!$user) {
-            return ['success' => false, 'message' => 'Usuario no autenticado'];
-        }
-
-        return $this->delete("/animales/{$animalId}/progenitor/{$tipo}", $this->authHeaders($user));
+        return $this->delete("/animales/{$animalId}/progenitor/{$tipo}");
     }
 
+    /**
+     * Obtiene la lista de animales disponibles y aptos para ser asignados como progenitor.
+     *
+     * @param int $animalId Identificador único del animal hijo.
+     * @param string $tipo Tipo de progenitor a consultar ('Padre' o 'Madre').
+     * @return array
+     */
     public function getDisponibles(int $animalId, string $tipo): array
     {
-        $user = $this->getUser();
-        if (!$user) {
-            return ['success' => false, 'data' => []];
-        }
-
-        return $this->get("/animales/{$animalId}/progenitores-disponibles?tipo={$tipo}", $this->authHeaders($user));
+        return $this->get("/animales/{$animalId}/progenitores-disponibles" . $this->buildQuery(['tipo' => $tipo]));
     }
 }

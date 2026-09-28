@@ -1,135 +1,334 @@
-# GanaderaSoft - Sistema de Gestión Ganadera
+# GanaderaSoft - Sistema de gestión ganadera
 
-## Descripción
+GanaderaSoft Frontend es la aplicación web desarrollada en Laravel 10 (Blade, Tailwind CSS y Vite) que sirve como interfaz de usuario y panel administrativo para la gestión integral de operaciones ganaderas, consumiendo los servicios de la API REST de GanaderaSoft para el manejo de animales, fincas, rebaños, lactancia, producción lechera y más.
 
-GanaderaSoft es un sistema de gestión ganadera desarrollado en Laravel 10 con PHP 8.1. Funciona como un gateway API que se conecta a servicios externos para el manejo integral de datos ganaderos incluyendo animales, fincas, rebaños, lactancia, producción lechera y más.
+## 1. ⚒️ Stack tecnológico
 
-## Tecnologías
+| Componente | Tecnología | Versión | Propósito |
+| :--- | :--- | :--- | :--- |
+| **Frontend framework** | Laravel | 10.x | Lógica de presentación y rutas. |
+| **Lenguaje servidor** | PHP | 8.1+ | Motor de ejecución del frontend. |
+| **Gestor del servidor** | Composer | 2.x | Gestor de dependencias para PHP. |
+| **Frontend UI** | Blade | - | Motor de plantillas de Laravel. |
+| **Estilos UI** | Tailwind CSS | 3.4 | Framework CSS de utilidades. |
+| **Scripting UI** | JavaScript | - | Interactividad del cliente. |
+| **Bundler** | Vite | 5.0 | Compilador de assets. |
+| **Servidor web** | Nginx | 1.18+ | Servidor web y proxy inverso (Producción). |
+| **Entorno local** | Docker | - | Virtualización de servicios. |
+| **CI/CD** | GitHub Actions | - | Automatización del despliegue a VPS. |
 
-- **Backend**: Laravel 10, PHP 8.1
-- **Frontend**: Blade Templates, Tailwind CSS, JavaScript
-- **Arquitectura**: Service Layer Pattern con Dependency Injection
-- **Autenticación**: Sistema personalizado basado en sesiones
+## 2. 📂 Infraestructura y arquitectura
 
-## Estructura de Directorios
+### 2.1 Arquitectura de software
+El proyecto del frontend sigue una arquitectura orientada a la presentación, conectándose a los servicios de la API REST Backend:
 
-### `/app`
-**Propósito**: Lógica principal de la aplicación Laravel
+```text
+/frontend
+├── app/                    # Lógica del servidor frontend
+│   ├── Console/            # Comandos de consola
+│   ├── Exceptions/         # Manejo de excepciones
+│   ├── Http/               # Controladores y middleware
+│   │   ├── Controllers/    # Controladores web (Dashboard, Animales, etc.)
+│   │   └── Middleware/     # Filtros de peticiones HTTP
+│   ├── Providers/          # Proveedores de servicios
+│   └── Services/           # Servicios y conexión a la API externa
+│       ├── Api/            # Consumo de API REST Backend
+│       └── Contracts/      # Interfaces de servicios
+├── bootstrap/              # Arranque del framework
+├── config/                 # Configuraciones
+├── database/               # Migraciones locales (si aplica)
+├── docs/                   # Documentación de endpoints externos
+├── public/                 # Archivos públicos y assets compilados
+├── resources/              # Código fuente del frontend
+│   ├── css/                # Estilos base de Tailwind
+│   ├── js/                 # Código fuente JavaScript
+│   └── views/              # Plantillas Blade por módulos
+├── routes/                 # Rutas de la aplicación (web.php)
+├── scripts/                # Scripts utilitarios
+├── storage/                # Almacenamiento temporal y logs
+└── tests/                  # Pruebas automatizadas
+```
 
-- **`/Console`**: Comandos de consola Artisan
-- **`/Exceptions`**: Manejo de excepciones personalizadas
-- **`/Http`**: Controladores, middleware y requests HTTP
-  - **`/Controllers`**: Controladores de la aplicación (Dashboard, Animales, Lactancia, Leche, etc.)
-  - **`/Middleware`**: Middleware personalizado (`CheckMockAuth` para autenticación)
-- **`/Providers`**: Service Providers de Laravel (bindings, configuraciones)
-- **`/Services`**: Capa de servicios con patrón de arquitectura limpia
-  - **`/Api`**: Implementaciones que se conectan a APIs externas
-  - **`/Contracts`**: Interfaces que definen contratos de servicios
-  - **`/Mock`**: Implementaciones mock para desarrollo y testing
+### 2.2 Infraestructura de servidores
 
-### `/bootstrap`
-**Propósito**: Archivos de arranque de Laravel
-- Configuración inicial del framework
+El proyecto maneja dos entornos con comportamientos diferentes:
 
-### `/config`
-**Propósito**: Archivos de configuración de Laravel
-- Configuraciones de base de datos, servicios, autenticación, etc.
+1. Entorno local (Dockerizado para Desarrollo)
+   - Orquestación: Usa `docker-compose.yml` montando volúmenes en tiempo real.
+   - Servidor web: Servidor local de Artisan o Nginx interno.
+   - Base de datos: Contenedor **MySQL**.
+2. Entorno producción (Dockerizado Optimizado)
+   - Orquestación: Usa `docker-compose.prod.yml` con imágenes compiladas independientemente.
+   - Proxy externo: **Nginx** nativo en el servidor VPS (Reverse Proxy hacia Docker).
+   - Procesador PHP: **PHP-FPM 8.2** ejecutándose internamente en el contenedor.
+   - Base de datos: Servidor **MySQL** externo a la red de los contenedores web.
 
-### `/database`
-**Propósito**: Esquema y migraciones de base de datos
-- `bd_ganadera_soft.sql`: Esquema SQL de referencia para producción
-
-### `/docs`
-**Propósito**: Documentación técnica del proyecto
-- **`/apis_docs`**: Documentación detallada de endpoints de APIs externas (41 archivos)
-
-### `/public`
-**Propósito**: Archivos públicos accesibles por el navegador
-- Punto de entrada principal (`index.php`)
-- Assets estáticos (imágenes, CSS, JS compilados)
-
-### `/resources`
-**Propósito**: Recursos de frontend no compilados
-- **`/css`**: Stylesheets CSS fuente
-- **`/js`**: JavaScript fuente
-- **`/views`**: Templates Blade organizados por módulo (dashboard, animales, lactancia, etc.)
-
-### `/routes`
-**Propósito**: Definición de rutas de la aplicación
-- `web.php`: Rutas web principales
-- `api.php`: Rutas de API
-
-### `/scripts`
-**Propósito**: Scripts de utilidades y despliegue
-- `ganaderasoft-update.sh`: Script principal de actualización
-- `setup-gs-command.sh`: Configuración de comandos de sistema
-
-### `/storage`
-**Propósito**: Almacenamiento de archivos temporales y logs
-- Logs de aplicación, cache, sesiones, uploads
-
-### `/tests`
-**Propósito**: Tests automatizados
-- Configuración base para PHPUnit
-
-## Arquitectura de Servicios
+## Arquitectura de servicios
 
 El proyecto utiliza **Dependency Injection** y **Service Layer Pattern**:
 
-1. **Interfaces** (`/Services/Contracts`): Definen contratos para cada servicio
-2. **Implementaciones API** (`/Services/Api`): Se conectan a APIs externas reales
-3. **Implementaciones Mock** (`/Services/Mock`): Datos simulados para desarrollo
-4. **Binding**: En `AppServiceProvider` se configuran qué implementaciones usar
+1. **Interfaces** (`/Services/Contracts`): Definen los contratos y métodos para cada servicio del sistema.
+2. **Implementaciones API** (`/Services/Api`): Consumen los endpoints de la API Backend V2 estandarizando peticiones HTTP, cabeceras de autorización y manejo de errores.
+3. **Binding**: En `AppServiceProvider` se asocian las interfaces a sus respectivas implementaciones del servicio API.
 
-## Módulos Principales
+## 🚀 Pasos para desarrollo local
 
-### Gestión de Animales
-- CRUD completo de animales
-- Seguimiento de etapas de vida
-- Estados de salud
-- Cambios y transiciones
+> [!IMPORTANT]
+> Para el entorno de desarrollo local, es indispensable el uso de **Docker Compose** para la orquestación de los servicios.
+> En caso de usar Windows, para garantizar la compatibilidad de los volúmenes y el rendimiento de los contenedores, es obligatorio ejecutar este proyecto utilizando **WSL2** (Windows Subsystem for Linux) integrado con **Docker Desktop**. Evite ejecutar los comandos directamente sobre PowerShell o CMD si no es a través de una terminal de WSL.
 
-### Gestión de Fincas y Rebaños
-- Administración de propiedades ganaderas
-- Organización por rebaños
-- Gestión de personal
+### 1. Estructura de archivos
+Para comenzar, debe configurar la siguiente estructura de directorios en su entorno local dentro de una carpeta raíz (por ejemplo, `ganaderasoft/`):
 
-### Producción Lechera
-- Registros de lactancia
-- Control de producción diaria
-- Análisis de rendimiento
+```text
+ganaderasoft/
+├── backend/                  # Repositorio del API (Laravel)
+├── frontend/                 # Repositorio de la interfaz (Laravel + Vue/Blade)
+├── docker-compose.yml        # Orquestador de servicios (Desarrollo)
+└── docker-compose.prod.yml   # Orquestador de servicios (Producción)
+```
+> [!NOTE]
+> Tanto el código del `backend` como del `frontend` corresponden a sub-proyectos. Debe clonarlos o mantenerlos dentro de la carpeta principal para que el orquestador pueda localizar los archivos de configuración y los Dockerfiles.
 
-### Dashboard y Reportes
-- KPIs ganaderos
-- Visualización de datos
-- Métricas principales
+### 2. Configuración de variables de entorno
 
-## Comandos de Desarrollo
+Debe solicitar al equipo de desarrollo los archivos `.env` correspondientes al entorno de desarrollo.
+- El archivo `.env` del backend debe colocarse en `ganaderasoft/backend/.env`.
+- El archivo `.env` del frontend debe colocarse en `ganaderasoft/frontend/.env`.
+
+Alternativamente, puede copiar los archivos de ejemplo si están disponibles (`cp .env.dev .env`).
+
+### 3. Orquestación con docker
+
+En la raíz de la carpeta `ganaderasoft/`, asegúrese de tener (o crear) un archivo llamado `docker-compose.yml` preconfigurado que orquestará los servicios de desarrollo:
+
+<details>
+<summary><b>Ver contenido de <code>docker-compose.yml</code> (Desarrollo)</b></summary>
+
+```yaml
+services:
+  # Base de datos compartida (usada principalmente en desarrollo)
+  db:
+    image: mysql:8.0
+    container_name: ganaderasoft-db
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3306:3306"
+    volumes:
+      # Persistencia de datos de MySQL
+      - db_data:/var/lib/mysql
+    healthcheck:
+      # Verifica que MySQL esté listo antes de arrancar el backend
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ganaderasoft-network
+
+  # Backend (API Laravel)
+  ganaderasoft-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ganaderasoft-backend
+    restart: unless-stopped
+    ports:
+      - "8001:80"
+    env_file:
+      - ./backend/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - ganaderasoft-network
+    volumes:
+      # Monta el código local para desarrollo en tiempo real
+      - ./backend:/var/www/html
+      # Ignora la carpeta local vendor (se instala dentro del contenedor en el entrypoint)
+      - /var/www/html/vendor
+
+  # Frontend (Laravel + Vue/Blade con Vite)
+  ganaderasoft-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ganaderasoft-frontend
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+      - "5173:5173" # Puerto para Vite (HMR)
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - ganaderasoft-backend
+    networks:
+      - ganaderasoft-network
+    volumes:
+      # Monta el código local para desarrollo en tiempo real
+      - ./frontend:/var/www/html
+      # Ignora las carpetas locales para evitar conflictos de sistema operativo
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+
+volumes:
+  db_data:
+
+networks:
+  ganaderasoft-network:
+    driver: bridge
+```
+</details>
+
+Y de igual forma, para producción, asegúrese de tener el archivo `docker-compose.prod.yml`:
+
+<details>
+<summary><b>Ver contenido de <code>docker-compose.prod.yml</code> (Producción)</b></summary>
+
+```yaml
+services:
+  # Backend de Producción
+  ganaderasoft-backend:
+    build:
+      context: ./backend
+      # Usa el Dockerfile optimizado sin dependencias de desarrollo
+      dockerfile: Dockerfile.prod
+    container_name: ganaderasoft-backend-prod
+    restart: always
+    ports:
+      - "127.0.0.1:8001:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Persistencia de imágenes y archivos subidos (fotos, avatares, documentos)
+      - ./backend/storage/app/public:/var/www/html/storage/app/public
+    networks:
+      - ganaderasoft-network
+
+  # Frontend de Producción
+  ganaderasoft-frontend:
+    build:
+      context: ./frontend
+      # Usa el Dockerfile que compila Vite internamente
+      dockerfile: Dockerfile.prod
+    container_name: ganaderasoft-frontend-prod
+    restart: always
+    ports:
+      - "127.0.0.1:8000:80"
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      - ganaderasoft-backend
+    networks:
+      - ganaderasoft-network
+
+networks:
+  # Usa la misma red para que puedan conectarse a la BD de desarrollo si es necesario
+  ganaderasoft-network:
+    driver: bridge
+```
+</details>
+
+### 4. Configuración de la base de datos y Backend
+El frontend no posee base de datos local propia; consume directamente los servicios de la API Backend. Para el entorno de desarrollo local con Docker, el contenedor `ganaderasoft-db` de MySQL y el contenedor `ganaderasoft-backend` proveen la persistencia y la API:
+
+| Variable / Parámetro | Valor por defecto (.env.dev) | Propósito |
+| :--- | :--- | :--- |
+| **API_BASE_URL** | `http://ganaderasoft-backend/api` | Endpoint interno de conexión con la API en red Docker. |
+| **API_TIMEOUT** | `15` | Timeout en segundos para peticiones HTTP a la API. |
+| **DB_HOST** | `ganaderasoft-db` | Host de base de datos aprovisionado en Docker (gestión backend). |
+
+> [!NOTE]
+> La ejecución de migraciones y carga de datos iniciales (`php artisan migrate --seed`) se gestiona desde el contenedor del backend (`ganaderasoft-backend`).
+
+### 5. Ejecución del entorno con docker compose
+
+Una vez configurada la estructura de archivos y las variables de entorno, inicie la orquestación de los contenedores ejecutando el siguiente comando en la raíz del proyecto (`/ganaderasoft`):
 
 ```bash
-# Instalar dependencias
-composer install && npm install
+docker compose up --build
+```
+> [!TIP]
+> Use el flag `--build` la primera vez o cuando realice cambios en los archivos `Dockerfile` o `entrypoint.sh` para asegurar que las imágenes se actualicen correctamente. Si desea ejecutar los contenedores en segundo plano y dejar la terminal libre, añada el flag `-d`.
 
-# Desarrollo con watch
-npm run dev
+### 6. Ejecución del entorno de producción (opcional)
+Si desea probar cómo se comportará la aplicación en el servidor real (sin mapeo de volúmenes locales y con assets compilados), utilice el orquestador de producción.
 
-# Servir aplicación
-php artisan serve
+> [!WARNING]
+> **Requisito de base de datos**: 
+> El archivo `docker-compose.prod.yml` **no incluye un contenedor de base de datos** por defecto. Por lo tanto, antes de levantarlo debe asegurarse de que la base de datos de desarrollo esté corriendo (`docker compose up -d db`), o bien, haber configurado las credenciales de un servidor MySQL externo en los archivos `.env`.
 
-# Construcción para producción
-npm run build
+> [!IMPORTANT]
+> **Variables de entorno para producción**: 
+> Antes de construir las imágenes de producción, abra los archivos `.env` del Frontend y del Backend y asegúrese de configurar:
+> - `APP_ENV=production`
+> - `APP_DEBUG=false`
+> 
+> De lo contrario, Laravel seguirá intentando comportarse como si estuviera en desarrollo.
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-## Configuración
+## 🌿 Política de ramas (Git Flow) y nomenclatura
 
-1. Copiar `.env.example` a `.env`
-2. Configurar variables de entorno (URLs de APIs, credenciales)
-3. Instalar dependencias
-4. Iniciar servidor de desarrollo
+El desarrollo de GanaderaSoft se rige bajo la metodología estándar de **Git Flow**. La estabilidad del código y los entornos se gestionan mediante las siguientes directrices obligatorias:
 
-## Notas Técnicas
+### Reglas de protección y flujo de integración
 
-- **Autenticación**: Sistema personalizado con middleware `CheckMockAuth`
-- **API Gateway**: No usa base de datos local, se conecta a servicios externos
-- **Frontend**: Server-side rendering con Blade, CSS con Tailwind
-- **Servicios**: Intercambiables entre Mock y Api según configuración en `AppServiceProvider`
+- 🚫 **Prohibición de push o merge directo**: Queda terminantemente prohibido realizar `git push` o fusiones directas sobre las ramas protegidas `main` y `develop`. Todo cambio debe integrarse a través de un **Pull Request (PR)**.
+- 👥 **Revisión de código obligatoria para `main` (Peer Review)**: Para fusionar un Pull Request hacia la rama `main`, es **obligatorio que al menos un integrante del equipo distinto al autor** revise y apruebe formalmente el PR. La fusión a `main` activa de forma automática la tubería de **Despliegue Continuo (CD)** hacia el VPS de producción.
+- 👤 **Integración en `develop` sin revisión externa**: Para integrar cambios hacia `develop`, **no es necesaria** la aprobación de un tercero; el propio desarrollador puede aprobar y fusionar su PR una vez concluidas y probadas sus tareas localmente.
+- 🤖 **Eliminación automática de ramas en GitHub y limpieza local**: Al fusionar cualquier PR, **GitHub elimina automáticamente la rama remota de origen (*head branch*)**. El desarrollador no debe borrarla en GitHub manualmente; únicamente debe eliminar la rama de su entorno local y sincronizar referencias.
+
+### Taxonomía y nomenclatura de ramas
+
+| Prefijo / Rama | Origen | Destino | Revisión | Propósito y ejemplo representativo |
+| :--- | :--- | :--- | :--- | :--- |
+| `main` | — | — | **Protegida** | Rama de producción. Despliegue continuo (CD) automático. |
+| `develop` | `main` | — | **Protegida** | Base de integración de desarrollo. Todo cambio converge aquí. |
+| `feat/` o `feature/` | `develop` | `develop` | Autor (Local) | Nueva funcionalidad o módulo UI. Ej: `feat/modulo-pesaje`. |
+| `fix/` o `bugfix/` | `develop` | `develop` | Autor (Local) | Corrección de fallos en desarrollo. Ej: `fix/calculo-indice-corporal`. |
+| `hotfix/` | `main` | `main` y `develop` | **Obligatoria (Par)** | Parche crítico urgente en producción. Ej: `hotfix/error-login-sanctum`. |
+| `docs/` | `develop` | `develop` | Autor (Local) | Documentación técnica y manuales. Ej: `docs/actualizar-api-endpoints`. |
+| `chore/` | `develop` | `develop` | Autor (Local) | Mantenimiento, dependencias o configuración Vite/Docker. Ej: `chore/actualizar-vite`. |
+| `refactor/` | `develop` | `develop` | Autor (Local) | Refactorización de código sin alterar lógica externa. Ej: `refactor/servicio-animales`. |
+| `test/` | `develop` | `develop` | Autor (Local) | Adición o ajuste de pruebas unitarias/integración. Ej: `test/componentes-blade-test`. |
+| `release/` | `develop` | `main` y `develop` | **Obligatoria (Par)** | Preparación de versión candidata a producción. Ej: `release/v1.0.0`. |
+
+### Flujo de trabajo operativo para el desarrollador
+
+```bash
+# 1. Actualizar rama develop y crear la rama de trabajo según el tipo de cambio
+git checkout develop
+git pull origin develop
+git checkout -b feat/nombre-tarea
+
+# 2. Realizar cambios, probar localmente y subir al repositorio remoto
+git add .
+git commit -m "feat(animales): agregar visualización de curvas de lactancia"
+git push -u origin feat/nombre-tarea
+
+# 3. Abrir el Pull Request en GitHub hacia develop (o hacia main si es hotfix/)
+# - Si va a develop: el desarrollador aprueba y fusiona tras verificar pruebas.
+# - Si va a main: solicita revisión y aprobación formal de un compañero de equipo.
+
+# 4. Al fusionar, GitHub elimina la rama remota automáticamente.
+# Limpie su copia local y sincronice las referencias podadas:
+git checkout develop
+git pull origin develop
+git branch -d feat/nombre-tarea
+git fetch -p
+```
+
+## Notas técnicas
+
+- **Autenticación**: Validación de sesión web mediante middleware que almacena y propaga el token Bearer hacia las peticiones de la API.
+- **Arquitectura de presentación**: Server-side rendering (SSR) con Blade, estilos con Tailwind CSS y bundling eficiente con Vite.
+- **Consumo de API**: No requiere base de datos local; consume directamente la API Backend V2 a través de clientes HTTP en `app/Services/Api`.
+- **Inyección de dependencias**: Servicios desacoplados a través de interfaces registradas en `AppServiceProvider`.

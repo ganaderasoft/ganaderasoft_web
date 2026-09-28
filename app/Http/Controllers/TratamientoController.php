@@ -3,47 +3,73 @@
 namespace App\Http\Controllers;
 
 use App\Services\Contracts\TratamientoServiceInterface;
+use App\Services\Contracts\FincasServiceInterface;
+use App\Services\Contracts\RebanosServiceInterface;
 use Illuminate\Http\Request;
 
 class TratamientoController extends Controller
 {
-    public function __construct(protected TratamientoServiceInterface $service) {}
+    public function __construct(
+        protected TratamientoServiceInterface $service,
+        protected FincasServiceInterface $fincasService,
+        protected RebanosServiceInterface $rebanosService
+    ) {}
 
     public function index(Request $request)
     {
         $diagnosticoId = $request->query('diagnostico_id');
+        $fincaId       = $request->query('finca_id');
+        $rebanoId      = $request->query('rebano_id');
         $fechaInicio   = $request->query('fecha_inicio');
         $fechaFin      = $request->query('fecha_fin');
 
-        $response     = $this->service->getList($diagnosticoId, $fechaInicio, $fechaFin);
-        $tratamientos = ($response['success'] ?? false) ? ($response['data'] ?? []) : [];
+        $response     = $this->service->getList();
+        $data         = ($response['success'] ?? false) ? ($response['data'] ?? []) : [];
+        $tratamientos = (isset($data['data']) && is_array($data['data']) && !isset($data['id'])) ? $data['data'] : $data;
         $diagnosticos = $this->service->getDiagnosticos();
 
-        return view('tratamiento.index', compact('tratamientos', 'diagnosticos', 'diagnosticoId', 'fechaInicio', 'fechaFin'));
+        $fincasRes  = $this->fincasService->getFincas(['incluir_archivados' => true]);
+        $fincas     = $fincasRes['data'] ?? [];
+        $rebanosRes = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        $rebanos    = $rebanosRes['data'] ?? [];
+
+        if ($rebanoId && !$fincaId) {
+            $rebObj = collect($rebanos)->firstWhere('id', (int) $rebanoId);
+            if ($rebObj) {
+                $fincaId = $rebObj['finca_id'] ?? data_get($rebObj, 'finca.id') ?? null;
+            }
+        }
+
+        return view('tratamiento.index', compact('tratamientos', 'diagnosticos', 'fincas', 'rebanos', 'diagnosticoId', 'fincaId', 'rebanoId', 'fechaInicio', 'fechaFin'));
     }
 
     public function create()
     {
         $diagnosticos = $this->service->getDiagnosticos();
-        return view('tratamiento.create', compact('diagnosticos'));
+        $fincasRes    = $this->fincasService->getFincas();
+        $fincas       = $fincasRes['data'] ?? [];
+        $rebanosRes   = $this->rebanosService->getRebanos();
+        $rebanos      = $rebanosRes['data'] ?? [];
+
+        return view('tratamiento.create', compact('diagnosticos', 'fincas', 'rebanos'));
     }
 
     public function store(Request $request)
     {
         $request->validate([
-            'tratamiento_plan'           => 'nullable|string|max:255',
-            'tratamiento_fecha_ini'      => 'required|date',
-            'tratamiento_fecha_fin'      => 'required|date|after_or_equal:tratamiento_fecha_ini',
-            'tratamiento_diagnostico_id' => 'nullable|integer',
+            'plan'           => 'nullable|string|max:255',
+            'fecha_ini'      => 'required|date',
+            'fecha_fin'      => 'required|date|after_or_equal:fecha_ini',
+            'diagnostico_id' => 'nullable|integer',
         ], [
-            'tratamiento_fecha_ini.required'             => 'La fecha de inicio es requerida.',
-            'tratamiento_fecha_fin.required'             => 'La fecha de fin es requerida.',
-            'tratamiento_fecha_fin.after_or_equal'       => 'La fecha de fin debe ser igual o posterior a la fecha de inicio.',
+            'fecha_ini.required'       => 'La fecha de inicio es requerida.',
+            'fecha_fin.required'       => 'La fecha de fin es requerida.',
+            'fecha_fin.after_or_equal' => 'La fecha de fin debe ser igual o posterior a la fecha de inicio.',
         ]);
 
-        $data = $request->only(['tratamiento_plan', 'tratamiento_fecha_ini', 'tratamiento_fecha_fin', 'tratamiento_diagnostico_id']);
-        if (isset($data['tratamiento_diagnostico_id']) && $data['tratamiento_diagnostico_id'] === '') {
-            $data['tratamiento_diagnostico_id'] = null;
+        $data = $request->only(['plan', 'fecha_ini', 'fecha_fin', 'diagnostico_id']);
+        if (isset($data['diagnostico_id']) && $data['diagnostico_id'] === '') {
+            $data['diagnostico_id'] = null;
         }
 
         $response = $this->service->create($data);
@@ -71,22 +97,33 @@ class TratamientoController extends Controller
             return redirect()->route('tratamiento.index')->with('error', 'Tratamiento no encontrado.');
         }
         $tratamiento  = $response['data'];
-        $diagnosticos = $this->service->getDiagnosticos();
-        return view('tratamiento.edit', compact('tratamiento', 'diagnosticos'));
+        $fincasRes    = $this->fincasService->getFincas(['incluir_archivados' => true]);
+        $fincas       = $fincasRes['data']['data'] ?? $fincasRes['data'] ?? [];
+        $rebanosRes   = $this->rebanosService->getRebanos(['incluir_archivados' => true]);
+        $rebanos      = $rebanosRes['data']['data'] ?? $rebanosRes['data'] ?? [];
+
+        return view('tratamiento.edit', compact('tratamiento', 'diagnosticos', 'fincas', 'rebanos'));
     }
 
     public function update(Request $request, int $id)
     {
         $request->validate([
-            'tratamiento_plan'      => 'nullable|string|max:255',
-            'tratamiento_fecha_ini' => 'required|date',
-            'tratamiento_fecha_fin' => 'required|date',
+            'plan'           => 'nullable|string|max:255',
+            'fecha_ini'      => 'required|date',
+            'fecha_fin'      => 'required|date|after_or_equal:fecha_ini',
+            'diagnostico_id' => 'nullable|integer',
         ], [
-            'tratamiento_fecha_ini.required' => 'La fecha de inicio es requerida.',
-            'tratamiento_fecha_fin.required' => 'La fecha de fin es requerida.',
+            'fecha_ini.required'       => 'La fecha de inicio es requerida.',
+            'fecha_fin.required'       => 'La fecha de fin es requerida.',
+            'fecha_fin.after_or_equal' => 'La fecha de fin debe ser igual o posterior a la fecha de inicio.',
         ]);
 
-        $response = $this->service->update($id, $request->only(['tratamiento_plan', 'tratamiento_fecha_ini', 'tratamiento_fecha_fin']));
+        $data = $request->only(['plan', 'fecha_ini', 'fecha_fin', 'diagnostico_id']);
+        if (isset($data['diagnostico_id']) && $data['diagnostico_id'] === '') {
+            $data['diagnostico_id'] = null;
+        }
+
+        $response = $this->service->update($id, $data);
 
         if ($response['success'] ?? false) {
             return redirect()->route('tratamiento.index')->with('success', 'Tratamiento actualizado exitosamente.');

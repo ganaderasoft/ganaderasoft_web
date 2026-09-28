@@ -7,163 +7,133 @@ use App\Services\Contracts\AnimalesServiceInterface;
 class ApiAnimalesService extends BaseApiService implements AnimalesServiceInterface
 {
     /**
-     * Get list of animals for authenticated user
+     * Obtiene la lista de animales para el usuario autenticado.
+     * Permite filtrar por rebaño, estado de archivado y solicita resultados sin paginar por defecto.
+     *
+     * @param int|null $rebanoId ID del rebaño para filtrar (opcional).
+     * @param array $filters Filtros adicionales.
+     * @return array Respuesta de la API.
      */
-    public function getAnimales(?int $rebanoId = null): array
+    public function getAnimales(?int $rebanoId = null, array $filters = []): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $endpoint = '/animales';
+        $params = $filters;
         if ($rebanoId) {
-            $endpoint .= '?rebano_id=' . $rebanoId;
+            $params['rebano_id'] = $rebanoId;
         }
 
-        $response = $this->get($endpoint, [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/animales' . $this->buildQuery($params, true));
     }
 
     /**
-     * Get a single animal by ID
+     * Obtiene el detalle de un animal específico mediante su ID.
+     *
+     * @param int $id Identificador del animal.
+     * @return array
      */
     public function getAnimal(int $id): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get("/animales/{$id}", [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get("/animales/{$id}");
     }
 
     /**
-     * Create a new animal
+     * Crea un nuevo registro de animal.
+     *
+     * @param array $data Datos del animal a crear.
+     * @return array
      */
     public function createAnimal(array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->post('/animales', $data, [
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->post('/animales', $data);
     }
 
     /**
-     * Update an existing animal
+     * Actualiza la información de un animal existente.
+     *
+     * @param int $id Identificador del animal a actualizar.
+     * @param array $data Nuevos datos para el animal.
+     * @return array
      */
     public function updateAnimal(int $id, array $data): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->put("/animales/{$id}", $data, [
-            'Content-Type' => 'application/json',
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->put("/animales/{$id}", $data);
     }
 
     /**
-     * Get list of available breeds (composicion_raza)
+     * Archiva un animal activo.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function archiveAnimal(int $id): array
+    {
+        return $this->post("/animales/{$id}/archivar");
+    }
+
+    /**
+     * Desarchiva un animal archivado.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function unarchiveAnimal(int $id): array
+    {
+        return $this->post("/animales/{$id}/desarchivar");
+    }
+
+    /**
+     * Elimina definitivamente un animal del sistema.
+     *
+     * @param int $id
+     * @return array
+     */
+    public function deleteAnimal(int $id): array
+    {
+        return $this->delete("/animales/{$id}");
+    }
+
+    /**
+     * Obtiene el catálogo de composiciones de razas disponibles.
+     *
+     * @return array
      */
     public function getRazas(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/composicion-raza', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/composicion-raza' . $this->buildQuery([], true));
     }
 
     /**
-     * Get list of available health states
+     * Obtiene el catálogo de estados de salud disponibles.
+     *
+     * @return array
      */
     public function getEstadosSalud(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
-
-        $response = $this->get('/estados-salud', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+        return $this->get('/estados-salud' . $this->buildQuery([], true));
     }
 
     /**
-     * Get list of available animal stages
+     * Obtiene el catálogo de etapas de crecimiento/producción disponibles.
+     *
+     * @return array
      */
     public function getEtapas(): array
     {
-        $user = session('user');
-        
-        if (!$user || !isset($user['token'])) {
-            return [
-                'success' => false,
-                'message' => 'Usuario no autenticado'
-            ];
-        }
+        return $this->get('/etapas' . $this->buildQuery([], true));
+    }
 
-        $response = $this->get('/etapas', [
-            'Accept' => 'application/json',
-            'Authorization' => 'Bearer ' . $user['token'],
-        ]);
-
-        return $response;
+    /**
+     * Importa masivamente animales desde un archivo CSV o TXT.
+     *
+     * @param int $fincaId ID de la finca destino.
+     * @param mixed $file Archivo UploadedFile.
+     * @return array
+     */
+    public function importarAnimales(int $fincaId, $file): array
+    {
+        return $this->postMultipart(
+            '/animales/importar',
+            ['finca_id' => $fincaId],
+            ['archivo' => $file]
+        );
     }
 }
